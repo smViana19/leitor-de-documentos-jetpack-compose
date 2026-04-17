@@ -12,25 +12,96 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = PrimariaEscuro,
+    onPrimary = SobrePrimariaEscuro,
+    primaryContainer = ContainerPrimariaEscuro,
+    onPrimaryContainer = SobreContainerPrimariaEscuro,
+
+    secondary = SecundariaEscuro,
+    onSecondary = SobreSecundariaEscuro,
+    secondaryContainer = ContainerSecundariaEscuro,
+    onSecondaryContainer = SobreContainerSecundariaEscuro,
+
+    tertiary = TerciariaEscuro,
+    onTertiary = SobreTerciariaEscuro,
+    tertiaryContainer = ContainerTerciariaEscuro,
+    onTertiaryContainer = SobreContainerTerciariaEscuro,
+
+    error = ErroEscuro,
+    onError = SobreErroEscuro,
+    errorContainer = ContainerErroEscuro,
+    onErrorContainer = SobreContainerErroEscuro,
+
+    background = FundoEscuro,
+    onBackground = SobreFundoEscuro,
+
+    surface = SuperficieEscuro,
+    onSurface = SobreSuperficieEscuro,
+    surfaceVariant = VarianteSuperficieEscuro,
+    onSurfaceVariant = SobreVarianteSuperficieEscuro,
+
+    surfaceContainerLowest = ContainerSuperficieMaisAbaixoEscuro,
+    surfaceContainerLow = ContainerSuperficieAbaixoEscuro,
+    surfaceContainer = ContainerSuperficieEscuro,
+    surfaceContainerHigh = ContainerSuperficieAcimaEscuro,
+    surfaceContainerHighest = ContainerSuperficieMaisAcimaEscuro,
+
+    outline = ContornoEscuro,
+    outlineVariant = VarianteContornoEscuro,
+
+    inverseSurface = SuperficieInversaEscuro,
+    inverseOnSurface = SobreSuperficieInversaEscuro,
+    inversePrimary = PrimariaInversaEscuro,
+
+    surfaceTint = TinteSuperficieEscuro,
+    scrim = Veu,
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = Primaria,
+    onPrimary = SobrePrimaria,
+    primaryContainer = ContainerPrimaria,
+    onPrimaryContainer = SobreContainerPrimaria,
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    secondary = Secundaria,
+    onSecondary = SobreSecundaria,
+    secondaryContainer = ContainerSecundaria,
+    onSecondaryContainer = SobreContainerSecundaria,
+
+    tertiary = Terciaria,
+    onTertiary = SobreTerciaria,
+    tertiaryContainer = ContainerTerciaria,
+    onTertiaryContainer = SobreContainerTerciaria,
+
+    error = Erro,
+    onError = SobreErro,
+    errorContainer = ContainerErro,
+    onErrorContainer = SobreContainerErro,
+
+    background = Fundo,
+    onBackground = SobreFundo,
+
+    surface = Superficie,
+    onSurface = SobreSuperficie,
+    surfaceVariant = VarianteSuperficie,
+    onSurfaceVariant = SobreVarianteSuperficie,
+
+    surfaceContainerLowest = ContainerSuperficieMaisAbaixo,
+    surfaceContainerLow = ContainerSuperficieAbaixo,
+    surfaceContainer = ContainerSuperficie,
+    surfaceContainerHigh = ContainerSuperficieAcima,
+    surfaceContainerHighest = ContainerSuperficieMaisAcima,
+
+    outline = Contorno,
+    outlineVariant = VarianteContorno,
+
+    inverseSurface = SuperficieInversa,
+    inverseOnSurface = SobreSuperficieInversa,
+    inversePrimary = PrimariaInversa,
+
+    surfaceTint = TinteSuperficie,
+    scrim = Veu,
+
 )
 
 @Composable
