@@ -46,15 +46,14 @@ import com.example.leitordocumento_compose.R
 import com.example.leitordocumento_compose.ui.theme.AppTema
 
 @Composable
-fun HomeScreen(modifier: Modifier = Modifier)
-{
-
+fun HomeScreen(modifier: Modifier = Modifier) {
     val listaTeste = listOf("CNH", "CPF", "Outros Documentos")
-    Column(modifier = Modifier
-        .fillMaxSize()
-        .background(MaterialTheme.colorScheme.background)
-        .verticalScroll(rememberScrollState())
-        .systemBarsPadding()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
+            .systemBarsPadding()
     ) {
         Cabecalho()
         Spacer(modifier.height(32.dp))
@@ -69,16 +68,17 @@ fun HomeScreen(modifier: Modifier = Modifier)
 }
 
 @Composable
-private fun Cabecalho(modifier: Modifier = Modifier)
-{
+private fun Cabecalho(modifier: Modifier = Modifier) {
     Row(
         modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically
 
     ) {
         IconButton(onClick = {}) {
-            Icon(painter = painterResource(R.drawable.menu_icone),
+            Icon(
+                painter = painterResource(R.drawable.menu_icone),
                 contentDescription = "",
-                tint = MaterialTheme.colorScheme.primary)
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
         Spacer(modifier.width(16.dp))
         Text(
@@ -88,20 +88,23 @@ private fun Cabecalho(modifier: Modifier = Modifier)
             modifier = Modifier.weight(1f)
         )
         IconButton(onClick = {}) {
-            Icon(painter = painterResource(R.drawable.settings_menu),
+            Icon(
+                painter = painterResource(R.drawable.settings_menu),
                 contentDescription = "",
-                tint = MaterialTheme.colorScheme.primary)
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
 
     }
 }
 
 @Composable
-fun Titulo()
-{
-    Column(modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 32.dp)) {
+fun Titulo() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp)
+    ) {
         Text(
             text = "INÍCIO",
             style = MaterialTheme.typography.labelLarge,
@@ -126,14 +129,15 @@ fun Titulo()
 }
 
 @Composable
-fun CardPrincipal()
-{
-    Card(modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 24.dp),
+fun CardPrincipal() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp),
         shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSecondary)) {
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSecondary)
+    ) {
 
         Column(modifier = Modifier.padding(32.dp)) {
             Box(
@@ -141,7 +145,8 @@ fun CardPrincipal()
                     .size(56.dp)
                     .background(
                         color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = RoundedCornerShape(8.dp)),
+                        shape = RoundedCornerShape(8.dp)
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(painter = painterResource(R.drawable.ic_scanner), contentDescription = "")
@@ -159,14 +164,19 @@ fun CardPrincipal()
             Spacer(modifier = Modifier.height(32.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
 
-                Button(modifier = Modifier, shape = RoundedCornerShape(12.dp),
+                Button(
+                    modifier = Modifier, shape = RoundedCornerShape(12.dp),
                     onClick = {}) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "Iniciar",
+                        Text(
+                            text = "Iniciar",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onPrimary)
-                        Icon(painter = painterResource(R.drawable.ic_proximo_24),
-                            contentDescription = "")
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Icon(
+                            painter = painterResource(R.drawable.ic_proximo_24),
+                            contentDescription = ""
+                        )
                     }
                 }
             }
@@ -176,24 +186,30 @@ fun CardPrincipal()
 
 
 @Composable
-fun CardSelecao(modifier: Modifier = Modifier)
-{
-    Card(modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 24.dp),
+fun CardSelecao(modifier: Modifier = Modifier) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp),
         shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSecondary)
     ) {
 
-        Row(modifier = Modifier
-            .fillMaxWidth()
-            .padding(32.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier =  Modifier
-                .size(48.dp)
-                .background(color = MaterialTheme.colorScheme.tertiaryContainer,
-                    shape = RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp), verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = RoundedCornerShape(12.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(painter = painterResource(R.drawable.ic_carro_24), contentDescription = "")
             }
             Spacer(modifier = Modifier.width(20.dp))
@@ -208,12 +224,17 @@ fun CardSelecao(modifier: Modifier = Modifier)
 }
 
 @Composable
-fun HistoricoDigitalizacoes(lista: List<String>)
-{
-    Column(modifier = Modifier
-        .fillMaxSize()
-        .padding(horizontal = 24.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+fun HistoricoDigitalizacoes(lista: List<String>) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(text = "Histórico", style = MaterialTheme.typography.headlineLarge)
             TextButton(onClick = {}) {
                 Text(text = "Ver tudo", style = MaterialTheme.typography.bodyMedium)
@@ -231,20 +252,19 @@ fun HistoricoDigitalizacoes(lista: List<String>)
 }
 
 @Composable
-fun CardImagemHistorico(modifier: Modifier = Modifier)
-{
-    Card(modifier = Modifier.size(160.dp, 218.dp).padding(end = 16.dp),
+fun CardImagemHistorico(modifier: Modifier = Modifier) {
+    Card(
+        modifier = Modifier.size(160.dp, 218.dp).padding(end = 16.dp),
         shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSecondary)
-        ) {}
+    ) {}
 }
 
 
 @Preview(showBackground = true)
 @Composable
-private fun HomeScreenPreview()
-{
+private fun HomeScreenPreview() {
     AppTema {
         HomeScreen()
     }
@@ -252,8 +272,7 @@ private fun HomeScreenPreview()
 
 @Preview
 @Composable
-private fun CardSelecaoPreview()
-{
+private fun CardSelecaoPreview() {
     AppTema {
         CardSelecao()
     }
@@ -261,8 +280,7 @@ private fun CardSelecaoPreview()
 
 @Preview
 @Composable
-private fun HistoricoDigitalizacoesPreview()
-{
+private fun HistoricoDigitalizacoesPreview() {
     AppTema {
         val listaMockada = listOf("a", "b", "c")
         HistoricoDigitalizacoes(listaMockada)
@@ -272,10 +290,9 @@ private fun HistoricoDigitalizacoesPreview()
 
 @Preview
 @Composable
-private fun CardImagemHistoricoPreview()
-{
+private fun CardImagemHistoricoPreview() {
     AppTema {
         CardImagemHistorico()
     }
-    
+
 }

@@ -11,10 +11,8 @@ import com.example.leitordocumento_compose.ui.screen.FormScreen
 import com.example.leitordocumento_compose.ui.screen.HomeScreen
 import com.example.leitordocumento_compose.ui.theme.AppTema
 
-class MainActivity : ComponentActivity()
-{
-    override fun onCreate(savedInstanceState: Bundle?)
-    {
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
