@@ -108,15 +108,13 @@ fun AppTema(
     temaEscuro: Boolean = isSystemInDarkTheme(),
     corDinamica: Boolean = false,
     content: @Composable () -> Unit
-)
-{
-    val colorScheme = when
-    {
-        corDinamica && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-        {
+) {
+    val colorScheme = when {
+        corDinamica && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (temaEscuro) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
+
         temaEscuro -> DarkColorScheme
         else -> LightColorScheme
     }

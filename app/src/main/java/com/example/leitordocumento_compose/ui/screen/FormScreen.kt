@@ -33,25 +33,29 @@ import com.example.leitordocumento_compose.ui.theme.AppTema
 import com.example.leitordocumento_compose.ui.theme.Contorno
 
 @Composable
-fun FormScreen(modifier: Modifier = Modifier)
-{
-    Column(modifier = Modifier
-        .fillMaxSize()
-        .background(MaterialTheme.colorScheme.background)
-        .verticalScroll(rememberScrollState())
-        .systemBarsPadding()
+fun FormScreen(modifier: Modifier = Modifier) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
+            .systemBarsPadding()
     ) {
         Cabecalho()
         Spacer(modifier = Modifier.height(24.dp))
         ConfirmarDadosTitulo()
     }
 }
+
 @Composable
-private fun Cabecalho()
-{
+private fun Cabecalho() {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick =  {}) {
-            Icon(painter = painterResource(R.drawable.ic_voltar), contentDescription = "", tint = MaterialTheme.colorScheme.primary)
+        IconButton(onClick = {}) {
+            Icon(
+                painter = painterResource(R.drawable.ic_voltar),
+                contentDescription = "",
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
         Spacer(modifier = Modifier.width(16.dp))
         Text(
@@ -61,20 +65,23 @@ private fun Cabecalho()
             modifier = Modifier.weight(1f)
         )
         IconButton(onClick = {}) {
-            Icon(painter = painterResource(R.drawable.settings_menu),
+            Icon(
+                painter = painterResource(R.drawable.settings_menu),
                 contentDescription = "",
-                tint = MaterialTheme.colorScheme.primary)
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
 
     }
 }
 
 @Composable
-fun ConfirmarDadosTitulo(modifier: Modifier = Modifier)
-{
-    Column(modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 24.dp)) {
+fun ConfirmarDadosTitulo(modifier: Modifier = Modifier) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+    ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
             Image(
                 modifier = Modifier
@@ -85,16 +92,18 @@ fun ConfirmarDadosTitulo(modifier: Modifier = Modifier)
                 contentScale = ContentScale.FillWidth
             )
         }
-        Text(text= "Confirmar dados", style = MaterialTheme.typography.headlineSmall)
+        Text(text = "Confirmar dados", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(4.dp))
-        Text(text= "Extraímos as informações da sua CNH automaticamente.", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = "Extraímos as informações da sua CNH automaticamente.",
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }
 
 
 @Composable
-private fun Formulario(modifier: Modifier = Modifier)
-{
+private fun Formulario(modifier: Modifier = Modifier) {
     var text = ""
     Column() {
         TextField(
@@ -106,13 +115,12 @@ private fun Formulario(modifier: Modifier = Modifier)
         BasicTextField(value = "", onValueChange = {})
 
     }
-  }
+}
 
 
 @Preview
 @Composable
-private fun FormScreenScreenPreview()
-{
+private fun FormScreenScreenPreview() {
     AppTema {
         FormScreen()
     }
@@ -120,8 +128,7 @@ private fun FormScreenScreenPreview()
 
 @Preview
 @Composable
-private fun CabecalhoPreview()
-{
+private fun CabecalhoPreview() {
     AppTema {
         Cabecalho()
     }
@@ -129,8 +136,7 @@ private fun CabecalhoPreview()
 
 @Preview
 @Composable
-private fun ConfirmarDadosTituloPreview()
-{
+private fun ConfirmarDadosTituloPreview() {
     AppTema {
         ConfirmarDadosTitulo()
     }
@@ -138,8 +144,7 @@ private fun ConfirmarDadosTituloPreview()
 
 @Preview
 @Composable
-private fun FormularioPreview()
-{
+private fun FormularioPreview() {
     AppTema {
         Formulario()
     }
