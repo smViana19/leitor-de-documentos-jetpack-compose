@@ -148,11 +148,13 @@ val AppTipografia = Typography(
         fontWeight = FontWeight.Medium,
         fontSize   = 12.sp,   // label-md — campos de input
         lineHeight = 16.sp,
+        letterSpacing = 0.5.sp,
     ),
     labelSmall = TextStyle(
         fontFamily = FamiliaInter,
         fontWeight = FontWeight.Medium,
         fontSize   = 11.sp,
         lineHeight = 16.sp,
+        letterSpacing = 0.5.sp,
     ),
 )
