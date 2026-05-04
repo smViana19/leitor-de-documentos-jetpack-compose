@@ -1,7 +1,8 @@
 package com.example.leitordocumento_compose.ui.navigation
 
 enum class Screens(name : String) {
-    TELA_SCANNER(""),
-    TELA_FORMULARIO(""),
-    TELA_CONFIGURACAO(""),
+    TELA_HOME("tela_home"),
+    TELA_SCANNER("tela_scanner"),
+    TELA_FORMULARIO("tela_formulario"),
+    TELA_CONFIGURACAO("tela_configuracao")
 }

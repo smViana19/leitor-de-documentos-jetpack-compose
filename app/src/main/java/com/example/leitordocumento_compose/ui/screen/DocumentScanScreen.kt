@@ -69,10 +69,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 import com.example.leitordocumento_compose.R
 import com.example.leitordocumento_compose.ui.components.OcrResultadoSheet
 import com.example.leitordocumento_compose.ui.states.EstadoDocumento
 import com.example.leitordocumento_compose.ui.states.FeedbackDocumento
+import com.example.leitordocumento_compose.ui.theme.AppTema
 import com.example.leitordocumento_compose.utils.OcrProcessador
 import com.example.leitordocumento_compose.utils.OcrResultado
 import kotlinx.coroutines.delay
@@ -107,6 +110,7 @@ enum class DocumentType(val label: String) {
 // ──────────────────────────────────────────────
 @Composable
 fun DocumentScanScreen(
+    navController: NavController,
     onClose: () -> Unit = {},
     onHelp: () -> Unit = {},
     onCapture: () -> Unit = {},
@@ -178,7 +182,6 @@ fun DocumentScanScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .systemBarsPadding()
             .background(
                 Brush.verticalGradient(
                     colors = listOf(BackgroundTop, BackgroundBottom),
@@ -187,10 +190,13 @@ fun DocumentScanScreen(
                 )
             )
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()
+        ) {
 
             // ── Barra superior ──────────────────────────
-            TopBar(onClose = onClose, onHelp = onHelp)
+            TopBar(onClose = {
+                navController.navigateUp()
+            }, onHelp = onHelp)
 
             // ── Viewfinder (câmera + overlay) ───────────
             Box(
@@ -295,7 +301,7 @@ private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "DOCUMENT SCAN",
+                text = "Scanner de documento",
                 color = TextPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
@@ -325,7 +331,7 @@ private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.width(5.dp))
                 Text(
-                    text = "AUTO-DETECT ACTIVE",
+                    text = "Auto detecção ativa",
                     color = IndicatorActive,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -783,7 +789,10 @@ private fun DocumentTypeTabs(
 @ComposablePreview(showBackground = true, backgroundColor = 0xFF0A1628)
 @Composable
 private fun DocumentScanScreenPreview() {
-    DocumentScanScreen()
+    val navController = rememberNavController()
+    AppTema {
+        DocumentScanScreen(navController)
+    }
 }
 
 

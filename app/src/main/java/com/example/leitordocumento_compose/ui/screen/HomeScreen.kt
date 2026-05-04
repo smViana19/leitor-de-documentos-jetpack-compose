@@ -42,11 +42,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 import com.example.leitordocumento_compose.R
+import com.example.leitordocumento_compose.ui.navigation.Screens
 import com.example.leitordocumento_compose.ui.theme.AppTema
 
 @Composable
-fun HomeScreen(modifier: Modifier = Modifier) {
+fun HomeScreen(navController: NavController) {
     val listaTeste = listOf("CNH", "CPF", "Outros Documentos")
     Column(
         modifier = Modifier
@@ -56,10 +59,10 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             .systemBarsPadding()
     ) {
         Cabecalho()
-        Spacer(modifier.height(32.dp))
+        Spacer(Modifier.height(32.dp))
         Titulo()
         Spacer(modifier = Modifier.height(40.dp))
-        CardPrincipal()
+        CardPrincipal(navController)
         Spacer(modifier = Modifier.height(24.dp))
         CardSelecao()
         Spacer(modifier = Modifier.height(24.dp))
@@ -129,7 +132,7 @@ fun Titulo() {
 }
 
 @Composable
-fun CardPrincipal() {
+fun CardPrincipal(navController: NavController) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -166,7 +169,9 @@ fun CardPrincipal() {
 
                 Button(
                     modifier = Modifier, shape = RoundedCornerShape(12.dp),
-                    onClick = {}) {
+                    onClick = {
+                        navController.navigate(Screens.TELA_SCANNER.name)
+                    }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Iniciar",
@@ -265,8 +270,10 @@ fun CardImagemHistorico(modifier: Modifier = Modifier) {
 @Preview(showBackground = true)
 @Composable
 private fun HomeScreenPreview() {
+    val navController = rememberNavController()
+
     AppTema {
-        HomeScreen()
+        HomeScreen(navController)
     }
 }
 

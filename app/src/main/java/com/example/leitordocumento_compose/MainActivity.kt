@@ -45,6 +45,8 @@ import android.Manifest
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.painterResource
+import com.example.leitordocumento_compose.ui.navigation.MainNavigation
+import com.example.leitordocumento_compose.ui.navigation.Screens
 
 class MainActivity : ComponentActivity() {
 
@@ -70,9 +72,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             AppTema {
                 CameraPermissionWrapper {
-                    DocumentScanScreen(
-                        onClose = { finish() }
-                    )
+                    MainNavigation(Screens.TELA_HOME.name)
                 }
             }
         }
