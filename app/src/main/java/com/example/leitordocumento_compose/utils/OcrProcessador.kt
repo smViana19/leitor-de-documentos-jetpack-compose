@@ -6,16 +6,17 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.util.Log
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
-import androidx.camera.core.impl.utils.MatrixExt.postRotate
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.example.documentscan.DocumentType
+import com.example.leitordocumento_compose.ui.states.FeedbackDocumento
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -34,23 +35,35 @@ class OcrProcessador(
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private var imagemCaptura: ImageCapture? = null
 
-    fun bindCamera(previewView: PreviewView) {
+    private var analisadorFrame: AnalisadorFrame? = null
+    fun bindCamera(
+        previewView: PreviewView, onFeedback: (FeedbackDocumento) -> Unit = {}   // ← novo parâmetro
+    ) {
         val future = ProcessCameraProvider.getInstance(contexto)
         future.addListener({
             val provider = future.get()
             val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
+                it.surfaceProvider = previewView.surfaceProvider
             }
             imagemCaptura = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .build()
+            val analisador = AnalisadorFrame(
+                tipoDocumento = tipoDocumentoSelecionado,
+                onFeedback = onFeedback
+            )
+            val analiseImagem = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+                .also { it.setAnalyzer(executor, analisador) }
             try {
                 provider.unbindAll()
                 provider.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
-                    imagemCaptura
+                    imagemCaptura,
+                    analiseImagem
                 )
             } catch (e: Exception) {
                 onError("Erro ao iniciar câmera: ${e.message}")
@@ -59,6 +72,7 @@ class OcrProcessador(
 
 
     }
+
     fun capturarEProcessar() {
         val captura = imagemCaptura ?: run {
             onError("Câmera não inicializada")

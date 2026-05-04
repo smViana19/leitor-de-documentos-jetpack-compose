@@ -5,12 +5,17 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.EaseInOutSine
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -65,8 +71,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.leitordocumento_compose.R
 import com.example.leitordocumento_compose.ui.components.OcrResultadoSheet
+import com.example.leitordocumento_compose.ui.states.EstadoDocumento
+import com.example.leitordocumento_compose.ui.states.FeedbackDocumento
 import com.example.leitordocumento_compose.utils.OcrProcessador
 import com.example.leitordocumento_compose.utils.OcrResultado
+import kotlinx.coroutines.delay
 import androidx.compose.ui.tooling.preview.Preview as ComposablePreview
 
 // ──────────────────────────────────────────────
@@ -104,6 +113,9 @@ fun DocumentScanScreen(
     onFlashToggle: () -> Unit = {},
     onSwitchCamera: () -> Unit = {}
 ) {
+    var feedbackDocumento by remember { mutableStateOf(FeedbackDocumento()) }
+
+
     var ocrResultado by remember { mutableStateOf<OcrResultado?>(null) }
     var isProcessando by remember { mutableStateOf(false) }
     val contexto = LocalContext.current
@@ -131,7 +143,21 @@ fun DocumentScanScreen(
                 Toast.makeText(contexto, "Erro ao processar documento $error", Toast.LENGTH_LONG)
                     .show()
             }
-        ).also { it.bindCamera(previewView) }
+        ).also {
+            it.bindCamera(previewView) { feedback ->
+                feedbackDocumento = feedback
+            }
+        }
+
+    }
+    LaunchedEffect(feedbackDocumento.estado) {
+        if (feedbackDocumento.estado == EstadoDocumento.PERFEITO && !isProcessando) {
+            delay(8000)
+            if (feedbackDocumento.estado == EstadoDocumento.PERFEITO) {
+                isProcessando = true
+                ocrProcessador.capturarEProcessar()
+            }
+        }
     }
 
 
@@ -152,6 +178,7 @@ fun DocumentScanScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .systemBarsPadding()
             .background(
                 Brush.verticalGradient(
                     colors = listOf(BackgroundTop, BackgroundBottom),
@@ -192,7 +219,8 @@ fun DocumentScanScreen(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .fillMaxHeight(0.78f),
-                    cornerAlpha = cornerPulse
+                    cornerAlpha = cornerPulse,
+                    feedback = feedbackDocumento
                 )
             }
 
@@ -324,45 +352,6 @@ private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
     }
 }
 
-// ──────────────────────────────────────────────
-// Preview da câmera (CameraX)
-// ──────────────────────────────────────────────
-//@Composable
-//private fun CameraPreviewBox(modifier: Modifier = Modifier) {
-//    val context = LocalContext.current
-//    val lifecycleOwner = LocalLifecycleOwner.current
-//    val previewView = remember {
-//        PreviewView(context).apply {
-//            scaleType = PreviewView.ScaleType.FILL_CENTER
-//            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-//        }
-//    }
-//
-//    LaunchedEffect(Unit) {
-//        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-//        cameraProviderFuture.addListener({
-//            val cameraProvider = cameraProviderFuture.get()
-//            val preview = Preview.Builder().build().also {
-//                it.setSurfaceProvider(previewView.surfaceProvider)
-//            }
-//            try {
-//                cameraProvider.unbindAll()
-//                cameraProvider.bindToLifecycle(
-//                    lifecycleOwner,
-//                    CameraSelector.DEFAULT_BACK_CAMERA,
-//                    preview
-//                )
-//            } catch (e: Exception) {
-//                e.printStackTrace()
-//            }
-//        }, ContextCompat.getMainExecutor(context))
-//    }
-//
-//    AndroidView(
-//        factory = { previewView },
-//        modifier = modifier
-//    )
-//}
 
 // ──────────────────────────────────────────────
 // Overlay do scanner (cantos + texto)
@@ -370,8 +359,16 @@ private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
 @Composable
 private fun ScanOverlay(
     modifier: Modifier = Modifier,
-    cornerAlpha: Float
+    cornerAlpha: Float,
+    feedback: FeedbackDocumento = FeedbackDocumento()
 ) {
+
+    val corAnimada by animateColorAsState(
+        targetValue = feedback.corOverlay,
+        animationSpec = tween(400),
+        label = "cor_overlay"
+    )
+
     Box(
         modifier = modifier
             .drawWithContent {
@@ -382,18 +379,55 @@ private fun ScanOverlay(
                     strokeWidth = 3.dp.toPx(),
                     cornerRadius = 12.dp.toPx()
                 )
+                if (feedback.progresso > 0f) {
+                    drawBarraQualidade(
+                        progresso = feedback.progresso,
+                        cor = corAnimada
+                    )
+                }
             },
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = "ALIGN DOCUMENT WITHIN FRAME",
-            color = TextPrimary.copy(alpha = 0.55f),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 1.2.sp,
-            textAlign = TextAlign.Center
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            EstadoIcone(estado = feedback.estado)
+            Spacer(modifier = Modifier.height(8.dp))
+            AnimatedContent(targetState = feedback.mensagem, transitionSpec = {
+                fadeIn(tween(300)) togetherWith fadeOut(tween(200))
+            }, label = "mensagem_feedback") { msg ->
+                Text(
+                    text = msg,
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.5.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .background(
+                            color = Color(0x88000000),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+
+            }
+        }
     }
+}
+
+@Composable
+private fun EstadoIcone(estado: EstadoDocumento) {
+    val (emoji, cor) = when (estado) {
+        EstadoDocumento.NENHUM -> "📄" to Color(0xFF8A9BB5)
+        EstadoDocumento.DETECTANDO -> "🔍" to Color(0xFF8A9BB5)
+        EstadoDocumento.ALINHANDO -> "↔️" to Color(0xFF4A90D9)
+        EstadoDocumento.PERFEITO -> "✅" to Color(0xFF1D9E75)
+        EstadoDocumento.RUIM_LUZ -> "💡" to Color(0xFFBA7517)
+        EstadoDocumento.DESFOCADO -> "🔆" to Color(0xFFBA7517)
+    }
+    Text(text = emoji, fontSize = 22.sp)
 }
 
 private fun DrawScope.drawScanCorners(
@@ -750,4 +784,22 @@ private fun DocumentTypeTabs(
 @Composable
 private fun DocumentScanScreenPreview() {
     DocumentScanScreen()
+}
+
+
+private fun DrawScope.drawBarraQualidade(progresso: Float, cor: Color) {
+    val altBarra = 4.dp.toPx()
+    val y = size.height - altBarra
+    // Fundo
+    drawRect(
+        color = Color(0x33FFFFFF),
+        topLeft = Offset(0f, y),
+        size = Size(size.width, altBarra)
+    )
+    // Preenchimento animado
+    drawRect(
+        color = cor,
+        topLeft = Offset(0f, y),
+        size = Size(size.width * progresso, altBarra)
+    )
 }

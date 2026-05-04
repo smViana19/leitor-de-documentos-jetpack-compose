@@ -42,6 +42,9 @@ import androidx.core.content.ContextCompat
 import com.example.documentscan.DocumentScanScreen
 import com.example.leitordocumento_compose.ui.theme.AppTema
 import android.Manifest
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.res.painterResource
 
 class MainActivity : ComponentActivity() {
 
@@ -132,9 +135,10 @@ private fun PermissionDeniedScreen(onRequestAgain: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(32.dp)
         ) {
-            Text(
-                text = "📷",
-                fontSize = 48.sp
+            Icon(
+                painter = painterResource(R.drawable.ic_camera_24),
+                tint = MaterialTheme.colorScheme.primary,
+                contentDescription = "icone de camera"
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
@@ -159,7 +163,6 @@ private fun PermissionDeniedScreen(onRequestAgain: () -> Unit) {
                 Text("Permitir câmera", color = Color.White)
             }
             Spacer(modifier = Modifier.height(12.dp))
-            // Se o usuário negou permanentemente, manda para configurações
             TextButton(
                 onClick = {
                     context.startActivity(
