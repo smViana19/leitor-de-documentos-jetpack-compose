@@ -1,19 +1,47 @@
 package com.example.documentscan
 
+import android.widget.Toast
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.EaseInOutSine
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,12 +59,15 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview as ComposablePreview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.leitordocumento_compose.R
+import com.example.leitordocumento_compose.ui.components.OcrResultadoSheet
+import com.example.leitordocumento_compose.utils.OcrProcessador
+import com.example.leitordocumento_compose.utils.OcrResultado
+import androidx.compose.ui.tooling.preview.Preview as ComposablePreview
 
 // ──────────────────────────────────────────────
 // Cores
@@ -61,6 +92,7 @@ enum class DocumentType(val label: String) {
     PASSPORT("PASSPORT")
 }
 
+
 // ──────────────────────────────────────────────
 // Tela principal
 // ──────────────────────────────────────────────
@@ -72,7 +104,37 @@ fun DocumentScanScreen(
     onFlashToggle: () -> Unit = {},
     onSwitchCamera: () -> Unit = {}
 ) {
-    var selectedType by remember { mutableStateOf(DocumentType.DOCUMENT) }
+    var ocrResultado by remember { mutableStateOf<OcrResultado?>(null) }
+    var isProcessando by remember { mutableStateOf(false) }
+    val contexto = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var tipoSelecionado by remember { mutableStateOf(DocumentType.DOCUMENT) }
+
+    val previewView: PreviewView = remember {
+        PreviewView(contexto).apply {
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        }
+    }
+
+    val ocrProcessador = remember {
+        OcrProcessador(
+            contexto = contexto,
+            lifecycleOwner = lifecycleOwner,
+            tipoDocumentoSelecionado = { tipoSelecionado },
+            onResultado = { resultado ->
+                isProcessando = false
+                ocrResultado = resultado
+            },
+            onError = { error ->
+                isProcessando = false
+                Toast.makeText(contexto, "Erro ao processar documento $error", Toast.LENGTH_LONG)
+                    .show()
+            }
+        ).also { it.bindCamera(previewView) }
+    }
+
+
     var zoom by remember { mutableFloatStateOf(1f) }
     var flashOn by remember { mutableStateOf(false) }
 
@@ -117,8 +179,8 @@ fun DocumentScanScreen(
                         .background(Color(0xFF060D1A))
                 )
 
-                // Preview da câmera
-                CameraPreviewBox(
+                AndroidView(
+                    factory = { previewView },
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .fillMaxHeight(0.78f)
@@ -143,11 +205,32 @@ fun DocumentScanScreen(
                     flashOn = !flashOn
                     onFlashToggle()
                 },
-                onCapture = onCapture,
+                onCapture = {
+                    isProcessando = true
+                    ocrProcessador.capturarEProcessar()
+                },
                 onSwitchCamera = onSwitchCamera,
-                selectedType = selectedType,
-                onTypeSelected = { selectedType = it }
+                selectedType = tipoSelecionado,
+                onTypeSelected = { tipoSelecionado = it }
             )
+        }
+        if (isProcessando) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0x88000000)), Alignment.Center
+            ) {
+                CircularProgressIndicator(color = AccentBlue)
+            }
+        }
+        ocrResultado?.let { resultado ->
+            OcrResultadoSheet(
+                resultado = resultado,
+                onDismiss = { ocrResultado = null },
+                onConfirm = { confirmedResult ->
+                    ocrResultado = null
+                    // Use confirmedResult aqui (salvar, navegar, etc.) })
+                })
         }
     }
 }
@@ -171,7 +254,7 @@ private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
                 .background(Color(0xFF1A2740), RoundedCornerShape(12.dp))
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_salvar_24),
+                painter = painterResource(R.drawable.ic_fechar_24),
                 contentDescription = "Fechar",
                 tint = TextPrimary,
                 modifier = Modifier.size(20.dp)
@@ -195,7 +278,6 @@ private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                // Indicador pulsante
                 val pulse by rememberInfiniteTransition(label = "dot_pulse").animateFloat(
                     initialValue = 0.5f,
                     targetValue = 1f,
@@ -245,42 +327,43 @@ private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
 // ──────────────────────────────────────────────
 // Preview da câmera (CameraX)
 // ──────────────────────────────────────────────
-@Composable
-private fun CameraPreviewBox(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val previewView = remember {
-        PreviewView(context).apply {
-            scaleType = PreviewView.ScaleType.FILL_CENTER
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-        }
-    }
+//@Composable
+//private fun CameraPreviewBox(modifier: Modifier = Modifier) {
+//    val context = LocalContext.current
+//    val lifecycleOwner = LocalLifecycleOwner.current
+//    val previewView = remember {
+//        PreviewView(context).apply {
+//            scaleType = PreviewView.ScaleType.FILL_CENTER
+//            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+//        }
+//    }
+//
+//    LaunchedEffect(Unit) {
+//        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+//        cameraProviderFuture.addListener({
+//            val cameraProvider = cameraProviderFuture.get()
+//            val preview = Preview.Builder().build().also {
+//                it.setSurfaceProvider(previewView.surfaceProvider)
+//            }
+//            try {
+//                cameraProvider.unbindAll()
+//                cameraProvider.bindToLifecycle(
+//                    lifecycleOwner,
+//                    CameraSelector.DEFAULT_BACK_CAMERA,
+//                    preview
+//                )
+//            } catch (e: Exception) {
+//                e.printStackTrace()
+//            }
+//        }, ContextCompat.getMainExecutor(context))
+//    }
+//
+//    AndroidView(
+//        factory = { previewView },
+//        modifier = modifier
+//    )
+//}
 
-    LaunchedEffect(Unit) {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
-            val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
-            }
-            try {
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview
-                )
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }, ContextCompat.getMainExecutor(context))
-    }
-
-    AndroidView(
-        factory = { previewView },
-        modifier = modifier
-    )
-}
 // ──────────────────────────────────────────────
 // Overlay do scanner (cantos + texto)
 // ──────────────────────────────────────────────
@@ -332,8 +415,20 @@ private fun DrawScope.drawScanCorners(
         size = Size(cornerRadius * 2, cornerRadius * 2),
         style = stroke
     )
-    drawLine(color, Offset(pad + cornerRadius, pad), Offset(pad + cornerRadius + cornerLength, pad), strokeWidth, StrokeCap.Round)
-    drawLine(color, Offset(pad, pad + cornerRadius), Offset(pad, pad + cornerRadius + cornerLength), strokeWidth, StrokeCap.Round)
+    drawLine(
+        color,
+        Offset(pad + cornerRadius, pad),
+        Offset(pad + cornerRadius + cornerLength, pad),
+        strokeWidth,
+        StrokeCap.Round
+    )
+    drawLine(
+        color,
+        Offset(pad, pad + cornerRadius),
+        Offset(pad, pad + cornerRadius + cornerLength),
+        strokeWidth,
+        StrokeCap.Round
+    )
 
     // Top-right
     drawArc(
@@ -345,8 +440,20 @@ private fun DrawScope.drawScanCorners(
         size = Size(cornerRadius * 2, cornerRadius * 2),
         style = stroke
     )
-    drawLine(color, Offset(size.width - pad - cornerRadius, pad), Offset(size.width - pad - cornerRadius - cornerLength, pad), strokeWidth, StrokeCap.Round)
-    drawLine(color, Offset(size.width - pad, pad + cornerRadius), Offset(size.width - pad, pad + cornerRadius + cornerLength), strokeWidth, StrokeCap.Round)
+    drawLine(
+        color,
+        Offset(size.width - pad - cornerRadius, pad),
+        Offset(size.width - pad - cornerRadius - cornerLength, pad),
+        strokeWidth,
+        StrokeCap.Round
+    )
+    drawLine(
+        color,
+        Offset(size.width - pad, pad + cornerRadius),
+        Offset(size.width - pad, pad + cornerRadius + cornerLength),
+        strokeWidth,
+        StrokeCap.Round
+    )
 
     // Bottom-left
     drawArc(
@@ -358,8 +465,20 @@ private fun DrawScope.drawScanCorners(
         size = Size(cornerRadius * 2, cornerRadius * 2),
         style = stroke
     )
-    drawLine(color, Offset(pad + cornerRadius, size.height - pad), Offset(pad + cornerRadius + cornerLength, size.height - pad), strokeWidth, StrokeCap.Round)
-    drawLine(color, Offset(pad, size.height - pad - cornerRadius), Offset(pad, size.height - pad - cornerRadius - cornerLength), strokeWidth, StrokeCap.Round)
+    drawLine(
+        color,
+        Offset(pad + cornerRadius, size.height - pad),
+        Offset(pad + cornerRadius + cornerLength, size.height - pad),
+        strokeWidth,
+        StrokeCap.Round
+    )
+    drawLine(
+        color,
+        Offset(pad, size.height - pad - cornerRadius),
+        Offset(pad, size.height - pad - cornerRadius - cornerLength),
+        strokeWidth,
+        StrokeCap.Round
+    )
 
     // Bottom-right
     drawArc(
@@ -367,12 +486,27 @@ private fun DrawScope.drawScanCorners(
         startAngle = 0f,
         sweepAngle = 90f,
         useCenter = false,
-        topLeft = Offset(size.width - cornerRadius * 2 - pad, size.height - cornerRadius * 2 - pad),
+        topLeft = Offset(
+            size.width - cornerRadius * 2 - pad,
+            size.height - cornerRadius * 2 - pad
+        ),
         size = Size(cornerRadius * 2, cornerRadius * 2),
         style = stroke
     )
-    drawLine(color, Offset(size.width - pad - cornerRadius, size.height - pad), Offset(size.width - pad - cornerRadius - cornerLength, size.height - pad), strokeWidth, StrokeCap.Round)
-    drawLine(color, Offset(size.width - pad, size.height - pad - cornerRadius), Offset(size.width - pad, size.height - pad - cornerRadius - cornerLength), strokeWidth, StrokeCap.Round)
+    drawLine(
+        color,
+        Offset(size.width - pad - cornerRadius, size.height - pad),
+        Offset(size.width - pad - cornerRadius - cornerLength, size.height - pad),
+        strokeWidth,
+        StrokeCap.Round
+    )
+    drawLine(
+        color,
+        Offset(size.width - pad, size.height - pad - cornerRadius),
+        Offset(size.width - pad, size.height - pad - cornerRadius - cornerLength),
+        strokeWidth,
+        StrokeCap.Round
+    )
 }
 
 // ──────────────────────────────────────────────
@@ -553,7 +687,7 @@ private fun CaptureButton(onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            painter = painterResource(R.drawable.ic_salvar_24), // substituir por ícone de câmera real
+            painter = painterResource(R.drawable.ic_camera_24),
             contentDescription = "Capturar",
             tint = TextPrimary,
             modifier = Modifier.size(30.dp)

@@ -38,6 +38,8 @@ android {
 }
 
 dependencies {
+    implementation(libs.text.recognition)
+//    implementation(libs.text.recognition.latin)
 
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
