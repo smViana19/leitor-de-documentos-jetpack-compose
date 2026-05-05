@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.util.Log
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
@@ -30,35 +31,44 @@ class OcrProcessador(
     private val onResultado: (OcrResultado) -> Unit,
     private val onError: (String) -> Unit
 ) {
-
     private val reconhecedorTexto = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private var imagemCaptura: ImageCapture? = null
 
     private var analisadorFrame: AnalisadorFrame? = null
+
+    private var camera: Camera? = null
+    private var cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    private var cameraProvider: ProcessCameraProvider? = null
+
     fun bindCamera(
-        previewView: PreviewView, onFeedback: (FeedbackDocumento) -> Unit = {}   // ← novo parâmetro
+        previewView: PreviewView,
+        onFeedback: (FeedbackDocumento) -> Unit = {}
     ) {
         val future = ProcessCameraProvider.getInstance(contexto)
         future.addListener({
             val provider = future.get()
+            cameraProvider = provider
+
             val preview = Preview.Builder().build().also {
                 it.surfaceProvider = previewView.surfaceProvider
             }
             imagemCaptura = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .build()
+
             val analisador = AnalisadorFrame(
                 tipoDocumento = tipoDocumentoSelecionado,
                 onFeedback = onFeedback
             )
+
             val analiseImagem = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also { it.setAnalyzer(executor, analisador) }
             try {
                 provider.unbindAll()
-                provider.bindToLifecycle(
+                camera = provider.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
@@ -72,6 +82,31 @@ class OcrProcessador(
 
 
     }
+
+    fun ligarFlash(estadoAtual: Boolean): Boolean {
+        val novoEstado = !estadoAtual
+        val hasFlash = camera?.cameraInfo?.hasFlashUnit() ?: false
+
+        if (hasFlash) {
+            camera?.cameraControl?.enableTorch(novoEstado)
+        }
+        return if (hasFlash) novoEstado else false
+    }
+
+    fun setZoom(valor: Float) {
+        camera?.cameraControl?.setLinearZoom(valor)
+    }
+
+    fun trocarCamera(previewView: PreviewView) {
+        cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA)
+            CameraSelector.DEFAULT_FRONT_CAMERA
+        else
+            CameraSelector.DEFAULT_BACK_CAMERA
+        cameraProvider?.let { provider ->
+            bindCamera(previewView)
+        }
+    }
+
 
     fun capturarEProcessar() {
         val captura = imagemCaptura ?: run {

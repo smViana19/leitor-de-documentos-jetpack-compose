@@ -1,5 +1,6 @@
 package com.example.documentscan
 
+import android.graphics.Camera
 import android.widget.Toast
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
@@ -111,10 +112,7 @@ enum class DocumentType(val label: String) {
 @Composable
 fun DocumentScanScreen(
     navController: NavController,
-    onClose: () -> Unit = {},
     onHelp: () -> Unit = {},
-    onCapture: () -> Unit = {},
-    onFlashToggle: () -> Unit = {},
     onSwitchCamera: () -> Unit = {}
 ) {
     var feedbackDocumento by remember { mutableStateOf(FeedbackDocumento()) }
@@ -190,22 +188,22 @@ fun DocumentScanScreen(
                 )
             )
     ) {
-        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .systemBarsPadding()
         ) {
 
-            // ── Barra superior ──────────────────────────
             TopBar(onClose = {
                 navController.navigateUp()
             }, onHelp = onHelp)
 
-            // ── Viewfinder (câmera + overlay) ───────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                // Fundo escuro atrás do viewfinder
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -230,20 +228,23 @@ fun DocumentScanScreen(
                 )
             }
 
-            // ── Painel inferior ──────────────────────────
             BottomControls(
                 zoom = zoom,
-                onZoomChange = { zoom = it },
+                onZoomChange = {
+                    zoom = it
+                    ocrProcessador.setZoom(it)
+                },
                 flashOn = flashOn,
                 onFlashToggle = {
-                    flashOn = !flashOn
-                    onFlashToggle()
+                    flashOn = ocrProcessador.ligarFlash(flashOn)
                 },
                 onCapture = {
                     isProcessando = true
                     ocrProcessador.capturarEProcessar()
                 },
-                onSwitchCamera = onSwitchCamera,
+                onSwitchCamera = {
+                    ocrProcessador.trocarCamera(previewView)
+                },
                 selectedType = tipoSelecionado,
                 onTypeSelected = { tipoSelecionado = it }
             )
@@ -269,9 +270,6 @@ fun DocumentScanScreen(
     }
 }
 
-// ──────────────────────────────────────────────
-// Barra superior
-// ──────────────────────────────────────────────
 @Composable
 private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
     Box(
@@ -295,7 +293,6 @@ private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
             )
         }
 
-        // Título centralizado
         Column(
             modifier = Modifier.align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -340,7 +337,6 @@ private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
             }
         }
 
-        // Botão ajuda
         IconButton(
             onClick = onHelp,
             modifier = Modifier
@@ -359,9 +355,6 @@ private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
 }
 
 
-// ──────────────────────────────────────────────
-// Overlay do scanner (cantos + texto)
-// ──────────────────────────────────────────────
 @Composable
 private fun ScanOverlay(
     modifier: Modifier = Modifier,
@@ -570,12 +563,11 @@ private fun BottomControls(
             .padding(top = 20.dp, bottom = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Zoom slider
+
         ZoomSlider(zoom = zoom, onZoomChange = onZoomChange)
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Botões de ação
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -583,32 +575,23 @@ private fun BottomControls(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Flash
             ActionButton(
                 icon = painterResource(R.drawable.ic_flash_24),
                 label = if (flashOn) "FLASH ON" else "FLASH OFF",
                 onClick = onFlashToggle
             )
 
-            // Botão capturar (central, maior)
             CaptureButton(onClick = onCapture)
 
             ActionButton(
-                icon = painterResource(R.drawable.ic_flash_24),
-                label = if (flashOn) "FLASH ON" else "FLASH OFF",
-                onClick = onFlashToggle
+                icon = painterResource(R.drawable.ic_trocar_camera_24),
+                label = "Trocar câmera",
+                onClick = onSwitchCamera
             )
-            // Trocar câmera
-//            ActionButton(
-//                icon = Icons.Default.FlipCameraAndroid,
-//                label = "SWITCH",
-//                onClick = onSwitchCamera
-//            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Tabs de tipo de documento
         DocumentTypeTabs(
             selectedType = selectedType,
             onTypeSelected = onTypeSelected
