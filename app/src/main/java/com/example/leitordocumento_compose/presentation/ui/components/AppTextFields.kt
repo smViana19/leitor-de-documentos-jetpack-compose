@@ -1,4 +1,4 @@
-package com.example.leitordocumento_compose.ui.components
+package com.example.leitordocumento_compose.presentation.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -20,7 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.leitordocumento_compose.ui.theme.AppTema
+import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
 
 // DsTextField.kt
 @Composable
@@ -67,7 +67,7 @@ fun DsTextField(
                 else MaterialTheme.colorScheme.onSurfaceVariant
             ),
             decorationBox = { innerTextField ->
-                DsTextFieldDecorationBox(
+                _root_ide_package_.com.example.leitordocumento_compose.presentation.ui.components.DsTextFieldDecorationBox(
                     innerTextField = innerTextField,
                     placeholder = placeholder,
                     value = value,
@@ -142,8 +142,8 @@ private fun DsTextFieldDecorationBox(
 @Preview(showBackground = true, widthDp = 360, heightDp = 640)
 @Composable
 private fun COmponentePreview() {
-    AppTema {
-        DsTextField(
+    _root_ide_package_.com.example.leitordocumento_compose.presentation.ui.theme.AppTema {
+        _root_ide_package_.com.example.leitordocumento_compose.presentation.ui.components.DsTextField(
             value = "Samuel Viana",
             onValueChange = {},
             label = "Email",

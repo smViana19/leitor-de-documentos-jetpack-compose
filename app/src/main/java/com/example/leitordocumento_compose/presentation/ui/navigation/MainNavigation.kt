@@ -1,4 +1,4 @@
-package com.example.leitordocumento_compose.ui.navigation
+package com.example.leitordocumento_compose.presentation.ui.navigation
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.AnimatedContentTransitionScope
@@ -10,9 +10,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.documentscan.DocumentScanScreen
-import com.example.leitordocumento_compose.ui.screen.FormScreen
-import com.example.leitordocumento_compose.ui.screen.HomeScreen
-import com.example.leitordocumento_compose.ui.screen.SettingScreen
+import com.example.leitordocumento_compose.presentation.ui.screen.FormScreen
+import com.example.leitordocumento_compose.presentation.ui.screen.HomeScreen
+import com.example.leitordocumento_compose.presentation.ui.screen.SettingScreen
+
 
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")

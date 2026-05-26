@@ -1,4 +1,4 @@
-package com.example.leitordocumento_compose.ui.navigation
+package com.example.leitordocumento_compose.presentation.ui.navigation
 
 enum class Screens(name : String) {
     TELA_HOME("tela_home"),

@@ -1,4 +1,4 @@
-package com.example.leitordocumento_compose.ui.screen
+package com.example.leitordocumento_compose.presentation.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -46,8 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.leitordocumento_compose.R
-import com.example.leitordocumento_compose.ui.theme.AppTema
-import com.example.leitordocumento_compose.ui.theme.Contorno
+import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
+import com.example.leitordocumento_compose.presentation.ui.theme.Contorno
 
 @Composable
 fun FormScreen(navController: NavController)

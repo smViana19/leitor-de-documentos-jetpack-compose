@@ -40,13 +40,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.documentscan.DocumentScanScreen
-import com.example.leitordocumento_compose.ui.theme.AppTema
+import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
 import android.Manifest
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.painterResource
-import com.example.leitordocumento_compose.ui.navigation.MainNavigation
-import com.example.leitordocumento_compose.ui.navigation.Screens
+import com.example.leitordocumento_compose.presentation.ui.navigation.MainNavigation
+import com.example.leitordocumento_compose.presentation.ui.navigation.Screens
 
 class MainActivity : ComponentActivity() {
 

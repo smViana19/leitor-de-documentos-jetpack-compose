@@ -17,7 +17,7 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.example.documentscan.DocumentType
-import com.example.leitordocumento_compose.ui.states.FeedbackDocumento
+import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocumento
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions

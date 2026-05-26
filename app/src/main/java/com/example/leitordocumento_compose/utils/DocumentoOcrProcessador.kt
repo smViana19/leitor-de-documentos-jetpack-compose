@@ -460,8 +460,6 @@ object DocumentoOcrProcessador {
         return regexRg.find(raw)?.value
     }
 
-    // ── Formatação ────────────────────────────────────────────────────────────
-
     private fun String.formatarCpf(): String {
         val digits = replace(Regex("""\D"""), "")
         return if (digits.length == 11)

@@ -9,9 +9,9 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.compose.ui.graphics.Color
 import com.example.documentscan.DocumentType
-import com.example.leitordocumento_compose.ui.states.EstadoDocumento
-import com.example.leitordocumento_compose.ui.states.FeedbackDocumento
-import com.example.leitordocumento_compose.ui.states.ProporcoesDocumento
+import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
+import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocumento
+import com.example.leitordocumento_compose.presentation.ui.states.ProporcoesDocumento
 import java.io.ByteArrayOutputStream
 import kotlin.math.abs
 

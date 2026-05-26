@@ -1,10 +1,6 @@
 package com.example.documentscan
 
-import android.graphics.Camera
 import android.widget.Toast
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -62,21 +58,19 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.leitordocumento_compose.R
-import com.example.leitordocumento_compose.ui.components.OcrResultadoSheet
-import com.example.leitordocumento_compose.ui.states.EstadoDocumento
-import com.example.leitordocumento_compose.ui.states.FeedbackDocumento
-import com.example.leitordocumento_compose.ui.theme.AppTema
+import com.example.leitordocumento_compose.presentation.ui.components.OcrResultadoSheet
+import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
+import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocumento
+import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
 import com.example.leitordocumento_compose.utils.OcrProcessador
 import com.example.leitordocumento_compose.utils.OcrResultado
 import kotlinx.coroutines.delay
@@ -98,7 +92,8 @@ private val OverlayScrim = Color(0x99000000)
 // ──────────────────────────────────────────────
 // Modelo
 // ──────────────────────────────────────────────
-enum class DocumentType(val label: String) {
+enum class DocumentType(val label: String)
+{
     ID_CARD("ID CARD"),
     DOCUMENT("DOCUMENT"),
     BOOK("BOOK"),
@@ -114,7 +109,8 @@ fun DocumentScanScreen(
     navController: NavController,
     onHelp: () -> Unit = {},
     onSwitchCamera: () -> Unit = {}
-) {
+)
+{
     var feedbackDocumento by remember { mutableStateOf(FeedbackDocumento()) }
 
 
@@ -153,9 +149,11 @@ fun DocumentScanScreen(
 
     }
     LaunchedEffect(feedbackDocumento.estado) {
-        if (feedbackDocumento.estado == EstadoDocumento.PERFEITO && !isProcessando) {
+        if (feedbackDocumento.estado == EstadoDocumento.PERFEITO && !isProcessando)
+        {
             delay(8000)
-            if (feedbackDocumento.estado == EstadoDocumento.PERFEITO) {
+            if (feedbackDocumento.estado == EstadoDocumento.PERFEITO)
+            {
                 isProcessando = true
                 ocrProcessador.capturarEProcessar()
             }
@@ -249,7 +247,8 @@ fun DocumentScanScreen(
                 onTypeSelected = { tipoSelecionado = it }
             )
         }
-        if (isProcessando) {
+        if (isProcessando)
+        {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -271,7 +270,8 @@ fun DocumentScanScreen(
 }
 
 @Composable
-private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit) {
+private fun TopBar(onClose: () -> Unit, onHelp: () -> Unit)
+{
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -360,7 +360,8 @@ private fun ScanOverlay(
     modifier: Modifier = Modifier,
     cornerAlpha: Float,
     feedback: FeedbackDocumento = FeedbackDocumento()
-) {
+)
+{
 
     val corAnimada by animateColorAsState(
         targetValue = feedback.corOverlay,
@@ -378,7 +379,8 @@ private fun ScanOverlay(
                     strokeWidth = 3.dp.toPx(),
                     cornerRadius = 12.dp.toPx()
                 )
-                if (feedback.progresso > 0f) {
+                if (feedback.progresso > 0f)
+                {
                     drawBarraQualidade(
                         progresso = feedback.progresso,
                         cor = corAnimada
@@ -417,14 +419,16 @@ private fun ScanOverlay(
 }
 
 @Composable
-private fun EstadoIcone(estado: EstadoDocumento) {
-    val (emoji, cor) = when (estado) {
-        EstadoDocumento.NENHUM -> "📄" to Color(0xFF8A9BB5)
-        EstadoDocumento.DETECTANDO -> "🔍" to Color(0xFF8A9BB5)
-        EstadoDocumento.ALINHANDO -> "↔️" to Color(0xFF4A90D9)
-        EstadoDocumento.PERFEITO -> "✅" to Color(0xFF1D9E75)
-        EstadoDocumento.RUIM_LUZ -> "💡" to Color(0xFFBA7517)
-        EstadoDocumento.DESFOCADO -> "🔆" to Color(0xFFBA7517)
+private fun EstadoIcone(estado: EstadoDocumento)
+{
+    val (emoji, cor) = when (estado)
+    {
+        EstadoDocumento.NENHUM -> "" to Color(0xFF8A9BB5)
+        EstadoDocumento.DETECTANDO -> "" to Color(0xFF8A9BB5)
+        EstadoDocumento.ALINHANDO -> "" to Color(0xFF4A90D9)
+        EstadoDocumento.PERFEITO -> "" to Color(0xFF1D9E75)
+        EstadoDocumento.RUIM_LUZ -> "" to Color(0xFFBA7517)
+        EstadoDocumento.DESFOCADO -> "" to Color(0xFFBA7517)
     }
     Text(text = emoji, fontSize = 22.sp)
 }
@@ -434,7 +438,8 @@ private fun DrawScope.drawScanCorners(
     cornerLength: Float,
     strokeWidth: Float,
     cornerRadius: Float
-) {
+)
+{
     val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
     val pad = strokeWidth / 2
 
@@ -555,7 +560,8 @@ private fun BottomControls(
     onSwitchCamera: () -> Unit,
     selectedType: DocumentType,
     onTypeSelected: (DocumentType) -> Unit
-) {
+)
+{
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -603,7 +609,8 @@ private fun BottomControls(
 // Zoom Slider
 // ──────────────────────────────────────────────
 @Composable
-private fun ZoomSlider(zoom: Float, onZoomChange: (Float) -> Unit) {
+private fun ZoomSlider(zoom: Float, onZoomChange: (Float) -> Unit)
+{
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -636,7 +643,8 @@ private fun ActionButton(
     icon: Painter,
     label: String,
     onClick: () -> Unit
-) {
+)
+{
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -674,7 +682,8 @@ private fun ActionButton(
 // Botão capturar (central)
 // ──────────────────────────────────────────────
 @Composable
-private fun CaptureButton(onClick: () -> Unit) {
+private fun CaptureButton(onClick: () -> Unit)
+{
     val scale by rememberInfiniteTransition(label = "capture_scale").animateFloat(
         initialValue = 1f,
         targetValue = 1.04f,
@@ -725,7 +734,8 @@ private fun CaptureButton(onClick: () -> Unit) {
 private fun DocumentTypeTabs(
     selectedType: DocumentType,
     onTypeSelected: (DocumentType) -> Unit
-) {
+)
+{
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -751,14 +761,17 @@ private fun DocumentTypeTabs(
                     letterSpacing = 0.8.sp
                 )
                 Spacer(modifier = Modifier.height(5.dp))
-                if (isSelected) {
+                if (isSelected)
+                {
                     Box(
                         modifier = Modifier
                             .width(32.dp)
                             .height(2.dp)
                             .background(AccentBlueBright, RoundedCornerShape(1.dp))
                     )
-                } else {
+                }
+                else
+                {
                     Spacer(modifier = Modifier.height(2.dp))
                 }
             }
@@ -771,7 +784,8 @@ private fun DocumentTypeTabs(
 // ──────────────────────────────────────────────
 @ComposablePreview(showBackground = true, backgroundColor = 0xFF0A1628)
 @Composable
-private fun DocumentScanScreenPreview() {
+private fun DocumentScanScreenPreview()
+{
     val navController = rememberNavController()
     AppTema {
         DocumentScanScreen(navController)
@@ -779,7 +793,8 @@ private fun DocumentScanScreenPreview() {
 }
 
 
-private fun DrawScope.drawBarraQualidade(progresso: Float, cor: Color) {
+private fun DrawScope.drawBarraQualidade(progresso: Float, cor: Color)
+{
     val altBarra = 4.dp.toPx()
     val y = size.height - altBarra
     // Fundo
