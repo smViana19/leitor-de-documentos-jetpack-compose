@@ -101,7 +101,6 @@ fun HomeScreen(navController: NavController)
             .verticalScroll(rememberScrollState())
             .systemBarsPadding()
     ) {
-        Cabecalho()
         Spacer(Modifier.height(32.dp))
         Titulo()
         Spacer(modifier = Modifier.height(40.dp))
