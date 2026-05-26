@@ -1,11 +1,9 @@
-package com.example.leitordocumento_compose.ui.screen
+package com.example.leitordocumento_compose.presentation.ui.screen
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,44 +11,89 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CardElevation
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.leitordocumento_compose.R
-import com.example.leitordocumento_compose.ui.navigation.Screens
-import com.example.leitordocumento_compose.ui.theme.AppTema
+import com.example.leitordocumento_compose.presentation.ui.navigation.Screens
+import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
+
+
+enum class CategoriaScanner
+{
+    DOCUMENTO, PLACA
+}
+
+data class TipoDocumento(
+    val titulo: String,
+    val descricao: String,
+    val iconeRes: Int,
+    val rotaDestino: String,
+    val categoria: CategoriaScanner
+)
 
 @Composable
-fun HomeScreen(navController: NavController) {
+fun HomeScreen(navController: NavController)
+{
     val listaTeste = listOf("CNH", "CPF", "Outros Documentos")
+
+    var abaSelecionada by remember { mutableIntStateOf(0) }
+    val titulosAbas = listOf("Documentos", "Placas")
+
+    val listaDocumentos = listOf(
+        TipoDocumento("RG",
+            "Escaneie frente e verso do seu Documento de Identidade.",
+            R.drawable.ic_scanner,
+            Screens.TELA_SCANNER.name,
+            CategoriaScanner.DOCUMENTO),
+        TipoDocumento("CNH",
+            "Escaneie sua Carteira Nacional de Habilitação.",
+            R.drawable.ic_carro_24,
+            Screens.TELA_SCANNER.name,
+            CategoriaScanner.DOCUMENTO),
+        TipoDocumento("CRLV",
+            "Certificado de Registro e Licenciamento de Veículo.",
+            R.drawable.ic_scanner,
+            Screens.TELA_SCANNER.name,
+            CategoriaScanner.DOCUMENTO),
+        TipoDocumento("Placa de Carro",
+            "Escaneie a placa do veículo (Carro).",
+            R.drawable.ic_carro_24,
+            Screens.TELA_SCANNER.name,
+            CategoriaScanner.PLACA),
+        TipoDocumento("Placa de Moto",
+            "Escaneie a placa da motocicleta.",
+            R.drawable.ic_carro_24,
+            Screens.TELA_SCANNER.name,
+            CategoriaScanner.PLACA)
+    )
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -62,16 +105,53 @@ fun HomeScreen(navController: NavController) {
         Spacer(Modifier.height(32.dp))
         Titulo()
         Spacer(modifier = Modifier.height(40.dp))
-        CardPrincipal(navController)
+        TabRow(
+            selectedTabIndex = abaSelecionada,
+            modifier = Modifier.padding(horizontal = 24.dp),
+            containerColor = MaterialTheme.colorScheme.background
+        ) {
+            titulosAbas.forEachIndexed { index, titulo ->
+                Tab(
+                    selected = abaSelecionada == index,
+                    onClick = { abaSelecionada = index },
+                    text = {
+                        Text(
+                            text = titulo,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (abaSelecionada == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
-        CardSelecao()
+
+        val documentosFiltrados = listaDocumentos.filter { documento ->
+            when (abaSelecionada)
+            {
+                0 -> documento.categoria == CategoriaScanner.DOCUMENTO
+                1 -> documento.categoria == CategoriaScanner.PLACA
+                else -> false
+            }
+        }
+
+        // 6. Iterando sobre a lista filtrada
+        documentosFiltrados.forEach { documento ->
+            CardDocumento(
+                documento = documento,
+                onClick = { navController.navigate(documento.rotaDestino) }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
         Spacer(modifier = Modifier.height(24.dp))
         HistoricoDigitalizacoes(listaTeste)
     }
 }
 
 @Composable
-private fun Cabecalho(modifier: Modifier = Modifier) {
+private fun Cabecalho(modifier: Modifier = Modifier)
+{
     Row(
         modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically
 
@@ -102,7 +182,8 @@ private fun Cabecalho(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun Titulo() {
+fun Titulo()
+{
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -132,7 +213,8 @@ fun Titulo() {
 }
 
 @Composable
-fun CardPrincipal(navController: NavController) {
+fun CardPrincipal(navController: NavController)
+{
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -189,9 +271,77 @@ fun CardPrincipal(navController: NavController) {
     }
 }
 
+@Composable
+fun CardDocumento(
+    documento: TipoDocumento,
+    onClick: () -> Unit
+)
+{
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSecondary)
+    ) {
+        Column(modifier = Modifier.padding(24.dp)) { // Reduzi um pouco o padding para caberem melhor na tela
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(8.dp)
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(painter = painterResource(documento.iconeRes),
+                        contentDescription = documento.titulo)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = documento.titulo,
+                    style = MaterialTheme.typography.headlineSmall
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = documento.descricao,
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Button(
+                    modifier = Modifier,
+                    shape = RoundedCornerShape(12.dp),
+                    onClick = onClick
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Iniciar",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Icon(
+                            painter = painterResource(R.drawable.ic_proximo_24),
+                            contentDescription = "Iniciar scanner para ${documento.titulo}"
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
-fun CardSelecao(modifier: Modifier = Modifier) {
+fun CardSelecao(modifier: Modifier = Modifier)
+{
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -221,7 +371,8 @@ fun CardSelecao(modifier: Modifier = Modifier) {
             Column() {
                 Text(text = "CNH", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "Carteira de motorista", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "Carteira de motorista",
+                    style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -229,7 +380,8 @@ fun CardSelecao(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun HistoricoDigitalizacoes(lista: List<String>) {
+fun HistoricoDigitalizacoes(lista: List<String>)
+{
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -257,9 +409,12 @@ fun HistoricoDigitalizacoes(lista: List<String>) {
 }
 
 @Composable
-fun CardImagemHistorico(modifier: Modifier = Modifier) {
+fun CardImagemHistorico(modifier: Modifier = Modifier)
+{
     Card(
-        modifier = Modifier.size(160.dp, 218.dp).padding(end = 16.dp),
+        modifier = Modifier
+            .size(160.dp, 218.dp)
+            .padding(end = 16.dp),
         shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSecondary)
@@ -269,7 +424,8 @@ fun CardImagemHistorico(modifier: Modifier = Modifier) {
 
 @Preview(showBackground = true)
 @Composable
-private fun HomeScreenPreview() {
+private fun HomeScreenPreview()
+{
     val navController = rememberNavController()
 
     AppTema {
@@ -279,7 +435,8 @@ private fun HomeScreenPreview() {
 
 @Preview
 @Composable
-private fun CardSelecaoPreview() {
+private fun CardSelecaoPreview()
+{
     AppTema {
         CardSelecao()
     }
@@ -287,7 +444,8 @@ private fun CardSelecaoPreview() {
 
 @Preview
 @Composable
-private fun HistoricoDigitalizacoesPreview() {
+private fun HistoricoDigitalizacoesPreview()
+{
     AppTema {
         val listaMockada = listOf("a", "b", "c")
         HistoricoDigitalizacoes(listaMockada)
@@ -297,7 +455,8 @@ private fun HistoricoDigitalizacoesPreview() {
 
 @Preview
 @Composable
-private fun CardImagemHistoricoPreview() {
+private fun CardImagemHistoricoPreview()
+{
     AppTema {
         CardImagemHistorico()
     }
