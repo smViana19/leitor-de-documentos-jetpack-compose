@@ -14,14 +14,47 @@ import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocume
 import com.example.leitordocumento_compose.presentation.ui.states.ProporcoesDocumento
 import java.io.ByteArrayOutputStream
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sqrt
 
+/**
+ * AnalisadorFrame v2 — estabilizado e com detecção mais robusta.
+ *
+ * Melhorias principais:
+ *  1. Histórico de N frames para suavizar oscilações (média móvel)
+ *  2. Cálculo de nitidez via variância do Laplaciano (mais preciso que variância simples)
+ *  3. Detecção de área via gradiente de borda (melhor que contraste centro/borda)
+ *  4. Histeria de estado: só muda de PERFEITO → outro estado após K frames consecutivos ruins
+ *  5. Luminosidade com percentis para ignorar reflexos pontuais
+ */
 class AnalisadorFrame(
     private val tipoDocumento: () -> DocumentType,
     private val onFeedback: (FeedbackDocumento) -> Unit
 ) : ImageAnalysis.Analyzer {
 
+    // ── Throttling ────────────────────────────────────────────────────────────
     private var ultimaAnalise = 0L
-    private val intervaloMs = 200L
+    private val intervaloMs = 150L          // 6-7 FPS de análise — suficiente e menos CPU
+
+    // ── Histórico para suavização ─────────────────────────────────────────────
+    private val JANELA_HISTORICO = 5
+    private val historicoLuminosidade = ArrayDeque<Float>(JANELA_HISTORICO)
+    private val historicoNitidez = ArrayDeque<Float>(JANELA_HISTORICO)
+    private val historicoArea = ArrayDeque<Float>(JANELA_HISTORICO)
+
+    // ── Histeria de estado ────────────────────────────────────────────────────
+    private var estadoAtual = EstadoDocumento.NENHUM
+    private var contadorEstadoNovo = 0
+    private val LIMIAR_MUDANCA_ESTADO = 3   // precisa de 3 frames consecutivos para mudar estado
+
+    // ── Thresholds calibrados ─────────────────────────────────────────────────
+    private val LUZ_MIN = 45f
+    private val LUZ_MAX = 215f
+    private val NITIDEZ_MIN = 120f          // variância do Laplaciano — valor empírico
+    private val AREA_MUITO_PEQUENA = 0.22f
+    private val AREA_BOA_MIN = 0.40f
+    private val AREA_BOA_MAX = 0.88f
 
     override fun analyze(imagem: ImageProxy) {
         val tempoAtual = System.currentTimeMillis()
@@ -34,150 +67,193 @@ class AnalisadorFrame(
             val bitmap = imagem.toBitmap()
             val feedback = analisarBitmap(
                 bitmap = bitmap,
-                larguraFrame = imagem.width,
-                alturaFrame = imagem.height,
                 tipo = tipoDocumento()
             )
             onFeedback(feedback)
         } finally {
             imagem.close()
         }
-
     }
 
-    private fun analisarBitmap(
-        bitmap: Bitmap,
-        larguraFrame: Int,
-        alturaFrame: Int,
-        tipo: DocumentType
-    ): FeedbackDocumento  {
-        val luminosidade = calcularLuminosidade(bitmap)
-        if (luminosidade < 40f) {
-            return FeedbackDocumento(
-                estado    = EstadoDocumento.RUIM_LUZ,
-                mensagem  = "Ambiente muito escuro — aproxime de uma luz",
-                corOverlay = Color(0xFFE24B4A),
-                progresso  = luminosidade / 40f
-            )
-        }
-        if (luminosidade > 220f) {
-            return FeedbackDocumento(
-                estado    = EstadoDocumento.RUIM_LUZ,
-                mensagem  = "Luz em excesso — evite reflexos",
-                corOverlay = Color(0xFFBA7517),
-                progresso  = 0.3f
-            )
-        }
-        val nitidez = calcularNitidez(bitmap)
-        if (nitidez < 80f) {
-            return FeedbackDocumento(
-                estado     = EstadoDocumento.DESFOCADO,
-                mensagem   = "Imagem borrada — mantenha firme",
-                corOverlay  = Color(0xFFBA7517),
-                progresso   = nitidez / 80f
-            )
-        }
-        val propAlvo = when (tipo) {
-            DocumentType.ID_CARD -> ProporcoesDocumento.CNH
-            DocumentType.DOCUMENT -> ProporcoesDocumento.RG
-            DocumentType.PASSPORT -> 0.7f
-            DocumentType.BOOK -> 0.75f
+    private fun analisarBitmap(bitmap: Bitmap, tipo: DocumentType): FeedbackDocumento {
+        // Reduz para análise — 96x96 é bom equilíbrio entre precisão e velocidade
+        val scaled = Bitmap.createScaledBitmap(bitmap, 96, 96, true)
+        val pixels = IntArray(96 * 96)
+        scaled.getPixels(pixels, 0, 96, 0, 0, 96, 96)
+        scaled.recycle()
+
+        val grays = FloatArray(96 * 96) { i ->
+            val p = pixels[i]
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            0.299f * r + 0.587f * g + 0.114f * b
         }
 
-        val areaRelativa = calcularAreaDocumentoEstimada(bitmap)
+        // ── Métricas brutas ───────────────────────────────────────────────────
+        val lumBruta = calcularLuminosidadePercentil(grays)
+        val nitBruta = calcularVarianciaLaplaciano(grays, 96, 96)
+        val areaBruta = calcularAreaDocumentoPorGradiente(grays, 96, 96)
 
+        // ── Suavização por média móvel ────────────────────────────────────────
+        val luminosidade = adicionarEMedia(historicoLuminosidade, lumBruta)
+        val nitidez = adicionarEMedia(historicoNitidez, nitBruta)
+        val areaRelativa = adicionarEMedia(historicoArea, areaBruta)
+
+        // ── Determina feedback candidato ──────────────────────────────────────
+        val candidato = calcularFeedback(luminosidade, nitidez, areaRelativa)
+
+        // ── Aplica histeria de estado ─────────────────────────────────────────
+        return aplicarHisteria(candidato)
+    }
+
+    // ── Luminosidade por percentil (ignora reflexos/sombras pontuais) ─────────
+    private fun calcularLuminosidadePercentil(grays: FloatArray): Float {
+        val sorted = grays.copyOf().also { it.sort() }
+        // Usa mediana (P50) — muito mais estável que média
+        return sorted[sorted.size / 2]
+    }
+
+    // ── Variância do Laplaciano (padrão-ouro para nitidez) ───────────────────
+    // Calcula o laplaciano de cada pixel interior e retorna a variância.
+    // Alto → imagem nítida; baixo → borrada.
+    private fun calcularVarianciaLaplaciano(grays: FloatArray, w: Int, h: Int): Float {
+        var soma = 0.0
+        var somaSq = 0.0
+        var count = 0
+
+        for (y in 1 until h - 1) {
+            for (x in 1 until w - 1) {
+                val lap = (-4f * grays[y * w + x]
+                        + grays[(y - 1) * w + x]
+                        + grays[(y + 1) * w + x]
+                        + grays[y * w + (x - 1)]
+                        + grays[y * w + (x + 1)])
+                soma += lap
+                somaSq += lap * lap
+                count++
+            }
+        }
+        val media = soma / count
+        return ((somaSq / count) - (media * media)).toFloat().coerceAtLeast(0f)
+    }
+
+    // ── Área por magnitude de gradiente (Sobel simplificado) ─────────────────
+    // Detecta bordas fortes que indicam a presença de um documento retangular.
+    // Muito mais estável que a heurística centro/borda anterior.
+    private fun calcularAreaDocumentoPorGradiente(grays: FloatArray, w: Int, h: Int): Float {
+        // Analisa só a faixa central (descarta bordas da câmera)
+        val xMin = w / 6;
+        val xMax = w * 5 / 6
+        val yMin = h / 6;
+        val yMax = h * 5 / 6
+        val totalPixels = (xMax - xMin) * (yMax - yMin)
+
+        var pixelsFortes = 0
+        val limiarGradiente = 25f          // borda forte mínima
+
+        for (y in yMin until yMax) {
+            for (x in xMin until xMax) {
+                if (x == 0 || x == w - 1 || y == 0 || y == h - 1) continue
+                val gx = grays[y * w + (x + 1)] - grays[y * w + (x - 1)]
+                val gy = grays[(y + 1) * w + x] - grays[(y - 1) * w + x]
+                val mag = sqrt(gx * gx + gy * gy)
+                if (mag > limiarGradiente) pixelsFortes++
+            }
+        }
+
+        // Normaliza: quanto mais bordas, mais provável que haja documento
+        // Mapeia [0 → 0.15 de pixels fortes] para [0 → 1]
+        return (pixelsFortes.toFloat() / totalPixels / 0.15f).coerceIn(0f, 1f)
+    }
+
+    // ── Média móvel ───────────────────────────────────────────────────────────
+    private fun adicionarEMedia(fila: ArrayDeque<Float>, valor: Float): Float {
+        if (fila.size >= JANELA_HISTORICO) fila.removeFirst()
+        fila.addLast(valor)
+        return fila.average().toFloat()
+    }
+
+    // ── Lógica principal de feedback ──────────────────────────────────────────
+    private fun calcularFeedback(lum: Float, nit: Float, area: Float): FeedbackDocumento {
+        // 1. Luminosidade primeiro (problema ambiental, mais urgente)
+        if (lum < LUZ_MIN) return FeedbackDocumento(
+            estado = EstadoDocumento.RUIM_LUZ,
+            mensagem = "Ambiente escuro — aproxime de uma fonte de luz",
+            corOverlay = Color(0xFFE24B4A),
+            progresso = (lum / LUZ_MIN).coerceIn(0f, 1f)
+        )
+        if (lum > LUZ_MAX) return FeedbackDocumento(
+            estado = EstadoDocumento.RUIM_LUZ,
+            mensagem = "Reflexo excessivo — incline levemente o documento",
+            corOverlay = Color(0xFFBA7517),
+            progresso = 0.3f
+        )
+
+        // 2. Nitidez (câmera ainda focando)
+        if (nit < NITIDEZ_MIN) return FeedbackDocumento(
+            estado = EstadoDocumento.DESFOCADO,
+            mensagem = "Mantenha o celular firme…",
+            corOverlay = Color(0xFFBA7517),
+            progresso = (nit / NITIDEZ_MIN).coerceIn(0f, 1f)
+        )
+
+        // 3. Área / proximidade
         return when {
-            areaRelativa < 0.25f -> FeedbackDocumento(
-                estado     = EstadoDocumento.DETECTANDO,
-                mensagem   = "Aproxime o documento do quadro",
-                corOverlay  = Color(0xFF8A9BB5),
-                progresso   = areaRelativa / 0.25f
+            area < AREA_MUITO_PEQUENA -> FeedbackDocumento(
+                estado = EstadoDocumento.DETECTANDO,
+                mensagem = "Aproxime o documento do quadro",
+                corOverlay = Color(0xFF8A9BB5),
+                progresso = (area / AREA_MUITO_PEQUENA).coerceIn(0f, 1f)
             )
-            areaRelativa < 0.45f -> FeedbackDocumento(
-                estado     = EstadoDocumento.ALINHANDO,
-                mensagem   = "Centralize e aproxime um pouco mais",
-                corOverlay  = Color(0xFF4A90D9),
-                progresso   = (areaRelativa - 0.25f) / 0.20f
+
+            area < AREA_BOA_MIN -> FeedbackDocumento(
+                estado = EstadoDocumento.ALINHANDO,
+                mensagem = "Centralize e aproxime um pouco mais",
+                corOverlay = Color(0xFF4A90D9),
+                progresso = ((area - AREA_MUITO_PEQUENA) / (AREA_BOA_MIN - AREA_MUITO_PEQUENA)).coerceIn(
+                    0f,
+                    1f
+                )
             )
-            areaRelativa > 0.90f -> FeedbackDocumento(
-                estado     = EstadoDocumento.ALINHANDO,
-                mensagem   = "Afaste um pouco o documento",
-                corOverlay  = Color(0xFFBA7517),
-                progresso   = 0.7f
+
+            area > AREA_BOA_MAX -> FeedbackDocumento(
+                estado = EstadoDocumento.ALINHANDO,
+                mensagem = "Afaste um pouco o documento",
+                corOverlay = Color(0xFFBA7517),
+                progresso = 0.6f
             )
+
             else -> FeedbackDocumento(
-                estado     = EstadoDocumento.PERFEITO,
-                mensagem   = "Documento detectado",
-                corOverlay  = Color(0xFF4A90D9),
-                progresso   = 1f
+                estado = EstadoDocumento.PERFEITO,
+                mensagem = "✓ Documento posicionado",
+                corOverlay = Color(0xFF1D9E75),
+                progresso = 1f
             )
         }
     }
 
-    private fun calcularLuminosidade(bitmap: Bitmap): Float {
-        val scaled = Bitmap.createScaledBitmap(bitmap, 64, 64, false)
-        var soma = 0L
-        val pixels = IntArray(64*64)
-        scaled.getPixels(pixels, 0, 64, 0, 0, 64, 64)
-        for (pixel in pixels) {
-            val r = (pixel shr 16) and 0xFF
-            val g = (pixel shr 8)  and 0xFF
-            val b =  pixel         and 0xFF
-            soma += (0.299 * r + 0.587 * g + 0.114 * b).toLong()
+    // ── Histeria: evita mudanças de estado rápidas demais ────────────────────
+    private fun aplicarHisteria(candidato: FeedbackDocumento): FeedbackDocumento {
+        if (candidato.estado == estadoAtual) {
+            contadorEstadoNovo = 0
+            return candidato
         }
-        scaled.recycle()
-        return soma.toFloat() / (64 * 64)
+        contadorEstadoNovo++
+        // Mudança imediata para PERFEITO requer mais confirmações (evita falsos positivos)
+        val limiar = if (candidato.estado == EstadoDocumento.PERFEITO) LIMIAR_MUDANCA_ESTADO + 1
+        else LIMIAR_MUDANCA_ESTADO
+        return if (contadorEstadoNovo >= limiar) {
+            estadoAtual = candidato.estado
+            contadorEstadoNovo = 0
+            candidato
+        } else {
+            // Mantém o estado anterior mas atualiza progresso/mensagem levemente
+            candidato.copy(estado = estadoAtual)
+        }
     }
 
-    private fun calcularNitidez(bitmap: Bitmap): Float {
-        val scaled = Bitmap.createScaledBitmap(bitmap, 128, 128, false)
-        val pixels = IntArray(128 * 128)
-        scaled.getPixels(pixels, 0, 128, 0, 0, 128, 128)
-        scaled.recycle()
-
-        val grays = pixels.map { p ->
-            val r = (p shr 16) and 0xFF
-            val g = (p shr 8)  and 0xFF
-            val b =  p         and 0xFF
-            (0.299 * r + 0.587 * g + 0.114 * b)
-        }
-        val media = grays.average()
-        val variancia = grays.map { v -> (v - media) * (v - media) }.average()
-        return variancia.toFloat()
-    }
-
-    /**
-     * Estima a área do documento pela diferença de brilho entre centro e bordas.
-     * Substitua por detecção de contorno real quando integrar OpenCV/MLKit Selfie Seg.
-     */
-
-    private fun calcularAreaDocumentoEstimada(bitmap: Bitmap): Float {
-        val scaled = Bitmap.createScaledBitmap(bitmap, 32, 32, false)
-        val pixels = IntArray(32 * 32)
-        scaled.getPixels(pixels, 0, 32, 0, 0, 32, 32)
-        scaled.recycle()
-
-        fun grayAt(x: Int, y: Int): Float {
-            val p = pixels[y * 32 + x]
-            val r = (p shr 16) and 0xFF
-            val g = (p shr 8)  and 0xFF
-            val b =  p         and 0xFF
-            return (0.299f * r + 0.587f * g + 0.114f * b)
-        }
-
-        var somaCentro = 0f
-        for (y in 12..19) for (x in 12..19) somaCentro += grayAt(x, y)
-        val mediaCentro = somaCentro / 64f
-
-        var somaBorda = 0f
-        for (x in 0..31) { somaBorda += grayAt(x, 0); somaBorda += grayAt(x, 31) }
-        for (y in 1..30) { somaBorda += grayAt(0, y); somaBorda += grayAt(31, y) }
-        val mediaBorda = somaBorda / (32 * 4 - 4).toFloat()
-        val contraste = abs(mediaCentro - mediaBorda) / 255f
-        return (contraste * 3f).coerceIn(0f, 1f)
-
-    }
-
+    // ── Conversão ImageProxy → Bitmap ─────────────────────────────────────────
     private fun ImageProxy.toBitmap(): Bitmap {
         val yBuffer = planes[0].buffer
         val uBuffer = planes[1].buffer
@@ -191,10 +267,8 @@ class AnalisadorFrame(
         uBuffer.get(nv21, ySize + vSize, uSize)
         val yuvImage = YuvImage(nv21, ImageFormat.NV21, width, height, null)
         val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, width, height), 80, out)
+        yuvImage.compressToJpeg(Rect(0, 0, width, height), 92, out)
         val imageBytes = out.toByteArray()
         return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
     }
-
-
 }

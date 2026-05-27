@@ -41,36 +41,43 @@ sealed class OcrResultado {
 
 object DocumentoOcrProcessador {
 
-    // ── Regexes gerais ────────────────────────────────────────────────────────
 
-    /** Data no formato DD/MM/AAAA (aceita / . -) */
+    /** Data DD/MM/AAAA com separadores flexíveis */
     private val regexData = Regex("""(\d{2}[/.\-]\d{2}[/.\-]\d{4})""")
 
-    /** CPF: 000.000.000-00 ou variações sem pontuação */
-    private val regexCpf = Regex("""(\d{3}[.\- ]?\d{3}[.\- ]?\d{3}[.\- ]?\d{2})""")
+    /**
+     * CPF — aceita formatado (000.000.000-00) e compacto (00000000000).
+     * Exige 11 dígitos com separadores opcionais.
+     */
+    private val regexCpf = Regex("""(?<!\d)(\d{3}[.\- ]?\d{3}[.\- ]?\d{3}[.\- ]?\d{2})(?!\d)""")
 
-    /** Número de registro CNH: sequência de 9 a 11 dígitos */
-    private val regexRegistroCnh = Regex("""\b(\d{9,11})\b""")
+    /** Nº registro CNH — 9 a 11 dígitos isolados */
+    private val regexRegistroCnh = Regex("""(?<!\d)(\d{9,11})(?!\d)""")
 
-    /** RG: padrões comuns XX.XXX.XXX-X ou só dígitos com 7-9 chars */
-    private val regexRg = Regex("""(\d{1,2}\.?\d{3}\.?\d{3}-?[\dXx])""")
+    /**
+     * RG — formatos comuns:
+     *   XX.XXX.XXX-X  |  XX.XXX.XXX-X  |  XXXXXXXXX  (7-9 chars)
+     */
+    private val regexRg = Regex("""(?<!\d)(\d{1,2}\.?\d{3}\.?\d{3}-?[\dXx])(?!\d)""")
 
-    /** Categoria isolada: A, B, AB, ACC, C, D, E e combinações válidas */
-    private val regexCategoriaExata = Regex("""(?<![A-Z0-9])([ABCDE]{1,2}(?:CC)?)(?![A-Z0-9])""", RegexOption.IGNORE_CASE)
-
-    /** Lista exaustiva de categorias válidas no Brasil */
-    private val categoriasValidas = setOf(
-        "A", "B", "C", "D", "E",
-        "AB", "AC", "AD", "AE",
-        "ACC"  // permissão para ciclomotores (modelos novos)
+    /** Categoria de CNH — letras isoladas válidas */
+    private val regexCategoriaExata = Regex(
+        """(?<![A-Z0-9])([ABCDE]{1,2}(?:CC)?)(?![A-Z0-9])""",
+        RegexOption.IGNORE_CASE
     )
 
-    /** Rótulos de categoria — cobre CNH antiga e nova */
+    /** Valida se uma string limpa é uma categoria real */
+    private val categoriasValidas = setOf(
+        "A", "B", "C", "D", "E",
+        "AB", "AC", "AD", "AE", "ACC"
+    )
+
+    /** Rótulos de campo impressos nas CNHs brasileiras (novos e antigos modelos) */
     private val rotulosCategoria = listOf(
         "CAT. HAB", "CAT HAB", "CAT.HAB",
         "CAT. HABILITAÇÃO", "CAT HABILITAÇÃO",
         "CATEGORIA", "CAT.",
-        "9"  // número do campo no modelo novo
+        "9"
     )
 
     // ── Ponto de entrada ──────────────────────────────────────────────────────
@@ -83,9 +90,9 @@ object DocumentoOcrProcessador {
             .filter { it.isNotBlank() }
 
         return when {
-            isCnh(textoCompleto) -> OcrResultado.Cnh(processarCnh(linhas, textoCompleto))
-            isRg(textoCompleto) -> OcrResultado.Rg(processarRg(linhas, textoCompleto))
-            else -> OcrResultado.Unknown(rawText = textoCompleto)
+            isCnh(textoCompleto)  -> OcrResultado.Cnh(processarCnh(linhas, textoCompleto, mlKitTexto))
+            isRg(textoCompleto)   -> OcrResultado.Rg(processarRg(linhas, textoCompleto))
+            else                  -> OcrResultado.Unknown(rawText = textoCompleto)
         }
     }
 
@@ -128,97 +135,150 @@ object DocumentoOcrProcessador {
      *  Campo 9   → CAT. HAB.
      *  Campo ACC → (sufixo de categoria)
      */
-    private fun processarCnh(linhas: List<String>, rawText: String): DadosCNH {
+    private fun processarCnh(linhas: List<String>, rawText: String, mlText: Text): DadosCNH {
 
-        // -- Nome (campo 2e1) -------------------------------------------------
-        // Vem logo após linha que contém "NOME" e "SOBRENOME"
-        val nome = extractLineAfterKeyword(linhas, listOf("NOME E SOBRENOME", "NOME SOBRENOME"))
+        // ── Camada 1: extração por rótulo de linha ────────────────────────────
+
+        // Nome (campo 2e1)
+        val nome = extractLineAfterKeyword(linhas, listOf("NOME E SOBRENOME", "NOME SOBRENOME", "2E1", "2e1"))
             ?: extrairNomeFallBack(linhas)
 
-        // -- 1ª Habilitação (campo 1a) ----------------------------------------
-        val primeiraHab = extractDateAfterKeyword(
-            linhas,
-            listOf("1ª HABILITAÇÃO", "1a HABILITAÇÃO", "HABILITAÇÃO")
+        // 1ª Habilitação (campo 1a)
+        val primeiraHab = extractDateAfterKeyword(linhas, listOf("1ª HABILITAÇÃO", "1a HABILITAÇÃO", "1A HABILITAÇÃO", "PRIMEIRA HABILITAÇÃO"))
+            ?: extractDateAfterKeyword(linhas, listOf("1a", "1ª"))
+
+        // Nascimento (campo 3)
+        val (dataNascimento, localNascimento) = extrairNascimento(linhas, rawText)
+
+        // Emissão (campo 4a)
+        val dataEmissao = extractDateAfterKeyword(linhas, listOf("DATA EMISSÃO", "EMISSÃO", "EMISSAO", "4A", "4a"))
+
+        // Validade (campo 4b)
+        val dataValidade = extractDateAfterKeyword(linhas, listOf("VALIDADE", "4B", "4b", "VALID"))
+
+        // Doc Identidade / RG / Órgão emissor (campo 4c)
+        val (rg, orgaoEmissor) = extrairRgEOrgao(linhas, rawText)
+
+        // CPF (campo 4d)
+        val cpf = extrairCpf(linhas, rawText)
+
+        // Nº Registro (campo 5)
+        val numeroRegistro = extrairNumeroRegistro(linhas, rawText, cpf)
+
+        // Categoria (campo 9)
+        val categoria = extrairCategoria(linhas, rawText)
+
+        // Filiação
+        val filiacao = extractLineAfterKeyword(linhas, listOf("FILIAÇÃO", "FILIACAO"))
+
+        // Nacionalidade
+        val nacionalidade = extractLineAfterKeyword(linhas, listOf("NACIONALIDADE"))
+
+        // ── Camada 3: reconciliação com datas ─────────────────────────────────
+        // A CNH tem tipicamente 3-4 datas: nascimento, 1ªHab, emissão, validade.
+        // Se alguma ficou nula, tenta preencher com as datas restantes no texto.
+        val todasDatas = regexData.findAll(rawText).map { it.value }.toList()
+        val datasUsadas = listOfNotNull(dataNascimento, primeiraHab, dataEmissao, dataValidade).toMutableList()
+
+        fun proximaData(): String? = todasDatas.firstOrNull { it !in datasUsadas }
+            ?.also { datasUsadas.add(it) }
+
+        val dataNascFinal    = dataNascimento    ?: proximaData()
+        val primeiraHabFinal = primeiraHab       ?: proximaData()
+        val dataEmissaoFinal = dataEmissao       ?: proximaData()
+        val dataValidadeFinal = dataValidade     ?: proximaData()
+
+        return DadosCNH(
+            nome              = nome,
+            cpf               = cpf,
+            rg                = rg,
+            dataNascimento    = dataNascFinal,
+            localNascimento   = localNascimento,
+            numeroRegistro    = numeroRegistro,
+            primeiraHabilitacao = primeiraHabFinal,
+            dataEmissao       = dataEmissaoFinal,
+            dataValidade      = dataValidadeFinal,
+            categoria         = categoria,
+            orgaoEmissor      = orgaoEmissor,
+            filiacao          = filiacao,
+            nacionalidade     = nacionalidade,
+            rawText           = rawText
         )
+    }
 
-        // -- Data e local de nascimento (campo 3) ------------------------------
-        val linhaDataNasc = findLineContaining(linhas, listOf("DATA", "LOCAL", "NASCIMENTO"))
-        val linhaConteudoNasc = linhaDataNasc?.let { getNextContentLine(linhas, it) }
-        val dataNascimento = linhaConteudoNasc?.let { regexData.find(it)?.value }
-            ?: regexData.findAll(rawText).map { it.value }.firstOrNull()
-        val localNascimento = linhaConteudoNasc
-            ?.replace(regexData, "")
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
+    private fun extrairNascimento(linhas: List<String>, rawText: String): Pair<String?, String?> {
+        val rotulosNasc = listOf("DATA", "LOCAL", "NASCIMENTO", "3", "DATA NASC")
+        val linhaRotulo = findLineContaining(linhas, rotulosNasc)
+        val linhaConteudo = linhaRotulo?.let { getNextContentLine(linhas, it) }
 
-        // -- Data Emissão (campo 4a) ------------------------------------------
-        val dataEmissao =
-            extractDateAfterKeyword(linhas, listOf("DATA EMISSÃO", "EMISSÃO", "EMISSAO", "4a"))
+        val data = linhaConteudo?.let { regexData.find(it)?.value }
+        val local = linhaConteudo?.replace(regexData, "")?.trim()?.takeIf { it.isNotBlank() }
 
-        // -- Validade (campo 4b) -----------------------------------------------
-        val dataValidade = extractDateAfterKeyword(linhas, listOf("VALIDADE", "4b"))
-
-        // -- Doc. Identidade / RG + Órgão emissor (campo 4c) ------------------
-        val linhaDoc = findLineContaining(
-            linhas,
-            listOf("DOC. IDENTIDADE", "DOC IDENTIDADE", "IDENTIDADE", "4c")
+        return Pair(
+            data ?: regexData.findAll(rawText).map { it.value }.firstOrNull(),
+            local
         )
-        val linhaConteudoDoc = linhaDoc?.let { getNextContentLine(linhas, it) }
-        val rg = linhaConteudoDoc?.let { regexRg.find(it)?.value }
-            ?: extractRg(linhas, rawText)
-        val orgaoEmissor = linhaConteudoDoc
+    }
+
+    private fun extrairRgEOrgao(linhas: List<String>, rawText: String): Pair<String?, String?> {
+        val rotulosDoc = listOf("DOC. IDENTIDADE", "DOC IDENTIDADE", "IDENTIDADE", "4C", "4c", "RG", "REGISTRO GERAL")
+        val linhaDoc = findLineContaining(linhas, rotulosDoc)
+        val conteudo = linhaDoc?.let { getNextContentLine(linhas, it) }
+
+        val rg = conteudo?.let { regexRg.find(it)?.value }
+            ?: extractValueAfterKeyword(linhas, listOf("RG", "REGISTRO GERAL", "DOC. IDENTIDADE"))
+                ?.let { regexRg.find(it)?.value }
+            ?: regexRg.find(rawText)?.value
+
+        val orgao = conteudo
             ?.replace(regexRg, "")
             ?.replace(Regex("""\d"""), "")
             ?.trim()
             ?.takeIf { it.isNotBlank() }
 
-        // -- CPF (campo 4d) ---------------------------------------------------
-        val cpf = extractValueAfterKeyword(linhas, listOf("CPF", "4d"))
+        return Pair(rg, orgao)
+    }
+
+    private fun extrairCpf(linhas: List<String>, rawText: String): String? {
+        // Tenta pelo rótulo primeiro
+        val porRotulo = extractValueAfterKeyword(linhas, listOf("CPF", "4D", "4d"))
             ?.let { regexCpf.find(it)?.value?.formatarCpf() }
-            ?: regexCpf.find(rawText)?.value?.formatarCpf()
+        if (porRotulo != null) return porRotulo
 
-        // -- Nº Registro (campo 5) --------------------------------------------
-        val numeroRegistro =
-            extractValueAfterKeyword(linhas, listOf("REGISTRO", "Nº REGISTRO", "N° REGISTRO", "5"))
-                ?.let { regexRegistroCnh.find(it)?.value }
-                ?: regexRegistroCnh.findAll(rawText)
-                    .map { it.value }
-                    .firstOrNull { it.length in 9..11 && it != cpf?.replace(Regex("""\D"""), "") }
+        // Fallback: procura padrão de CPF no texto (11 dígitos com separadores)
+        // Prefere a versão formatada se presente
+        val formatado = Regex("""\d{3}\.\d{3}\.\d{3}-\d{2}""").find(rawText)?.value
+        if (formatado != null) return formatado
 
-        // -- Categoria (campo 9 / CAT. HAB.) ----------------------------------
-        val categoria = extrairCategoria(linhas, rawText)
+        return regexCpf.find(rawText)?.value?.let { raw ->
+            val digits = raw.replace(Regex("""\D"""), "")
+            if (digits.length == 11) digits.formatarCpf() else null
+        }
+    }
 
+    private fun extrairNumeroRegistro(linhas: List<String>, rawText: String, cpf: String?): String? {
+        val cpfDigits = cpf?.replace(Regex("""\D"""), "") ?: ""
 
-        // -- Filiação ---------------------------------------------------------
-        val filiacao = extractLineAfterKeyword(linhas, listOf("FILIAÇÃO", "FILIACAO"))
+        val porRotulo = extractValueAfterKeyword(
+            linhas, listOf("REGISTRO", "Nº REGISTRO", "N° REGISTRO", "N. REGISTRO", "5")
+        )?.let { regexRegistroCnh.find(it)?.value }
 
-        // -- Nacionalidade ----------------------------------------------------
-        val nacionalidade = extractLineAfterKeyword(linhas, listOf("NACIONALIDADE"))
+        if (porRotulo != null && porRotulo != cpfDigits) return porRotulo
 
-        return DadosCNH(
-            nome = nome,
-            cpf = cpf,
-            rg = rg,
-            dataNascimento = dataNascimento,
-            localNascimento = localNascimento,
-            numeroRegistro = numeroRegistro,
-            primeiraHabilitacao = primeiraHab,
-            dataEmissao = dataEmissao,
-            dataValidade = dataValidade,
-            categoria = categoria,
-            orgaoEmissor = orgaoEmissor,
-            filiacao = filiacao,
-            nacionalidade = nacionalidade,
-            rawText = rawText
-        )
+        // Fallback: primeiro número de 9-11 dígitos que não seja o CPF
+        return regexRegistroCnh.findAll(rawText)
+            .map { it.value }
+            .firstOrNull { num ->
+                num.length in 9..11 && num != cpfDigits
+            }
     }
 
     // ── Processamento RG ──────────────────────────────────────────────────────
 
     private fun processarRg(linhas: List<String>, rawText: String): DadosRG {
         val datas = regexData.findAll(rawText).map { it.value }.toList()
-        val cpf = regexCpf.find(rawText)?.value?.formatarCpf()
-        val numeroRg = extractRg(linhas, rawText)
+        val cpf = extrairCpf(linhas, rawText)
+        val numeroRg = extrairRgEOrgao(linhas, rawText).first
 
         val nome = extractLineAfterKeyword(linhas, listOf("NOME"))
             ?: extrairNomeFallBack(linhas)
@@ -228,15 +288,15 @@ object DocumentoOcrProcessador {
         val naturalidade = extractLineAfterKeyword(linhas, listOf("NATURALIDADE", "NATURAL"))
 
         return DadosRG(
-            nome = nome,
-            rg = numeroRg,
-            cpf = cpf,
+            nome           = nome,
+            rg             = numeroRg,
+            cpf            = cpf,
             dataNascimento = datas.firstOrNull(),
-            nomeMae = nomeMae,
-            nomePai = nomePai,
-            naturalidade = naturalidade,
-            dataEmissao = datas.lastOrNull(),
-            rawText = rawText
+            nomeMae        = nomeMae,
+            nomePai        = nomePai,
+            naturalidade   = naturalidade,
+            dataEmissao    = datas.lastOrNull(),
+            rawText        = rawText
         )
     }
 
@@ -339,15 +399,14 @@ object DocumentoOcrProcessador {
 
 
     /**
-     * Retorna a PRÓXIMA linha de conteúdo após a linha-rótulo que contém
-     * uma das [keywords]. Ignora linhas que parecem ser apenas rótulos.
+     * Retorna a primeira linha de conteúdo após a linha que contém uma keyword.
+     * Ignora linhas que parecem ser apenas rótulos.
      */
     private fun extractLineAfterKeyword(linhas: List<String>, keywords: List<String>): String? {
         val idx = linhas.indexOfFirst { line ->
             keywords.any { kw -> line.uppercase().contains(kw.uppercase()) }
         }
         if (idx < 0) return null
-        // Pula linhas que são apenas rótulos (curtas, sem letras minúsculas úteis)
         for (i in (idx + 1) until linhas.size) {
             val candidate = linhas[i]
             if (candidate.isNotBlank() && !isLinhaLabel(candidate)) return candidate
@@ -419,11 +478,11 @@ object DocumentoOcrProcessador {
         val labelKeywords = listOf(
             "NOME", "SOBRENOME", "HABILITAÇÃO", "EMISSÃO", "VALIDADE",
             "REGISTRO", "IDENTIDADE", "CPF", "CATEGORIA", "NATURALIDADE",
-            "FILIAÇÃO", "NACIONAL", "DATA", "LOCAL", "NASCIMENTO", "CAT"
+            "FILIAÇÃO", "NACIONAL", "DATA", "LOCAL", "NASCIMENTO", "CAT",
+            "ADMINISTRAÇÃO", "CONDUÇÃO", "SECRETARIA", "DETRAN"
         )
-        // Linha com 3 ou menos palavras e contém palavra-chave de rótulo
         val palavras = up.trim().split(Regex("\\s+"))
-        return palavras.size <= 4 && labelKeywords.any { up.contains(it) }
+        return palavras.size <= 5 && labelKeywords.any { up.contains(it) }
     }
 
     /**

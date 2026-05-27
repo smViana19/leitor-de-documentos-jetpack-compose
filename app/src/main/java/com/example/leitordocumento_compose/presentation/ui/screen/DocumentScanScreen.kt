@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -38,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -111,6 +113,7 @@ fun DocumentScanScreen(
 
     var ocrResultado by remember { mutableStateOf<OcrResultado?>(null) }
     var isProcessando by remember { mutableStateOf(false) }
+    var framesPerfeitos by remember { mutableIntStateOf(0) }
     val contexto = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -132,23 +135,23 @@ fun DocumentScanScreen(
             },
             onError = { error ->
                 isProcessando = false
-                Toast.makeText(contexto, "Erro ao processar documento $error", Toast.LENGTH_LONG)
+                Toast.makeText(contexto, "Erro ao processar $error", Toast.LENGTH_LONG)
                     .show()
             }
         ).also {
             it.bindCamera(previewView) { feedback ->
                 feedbackDocumento = feedback
+                if(feedback.estado == EstadoDocumento.PERFEITO) framesPerfeitos++
+                else framesPerfeitos = 0
             }
         }
-
     }
-    LaunchedEffect(feedbackDocumento.estado) {
-        if (feedbackDocumento.estado == EstadoDocumento.PERFEITO && !isProcessando)
-        {
-            delay(1500)
-            if (feedbackDocumento.estado == EstadoDocumento.PERFEITO)
-            {
+    LaunchedEffect(framesPerfeitos) {
+        if (framesPerfeitos >= 4 && !isProcessando) {
+            delay(500)   // 500ms adicionais de segurança
+            if (framesPerfeitos >= 4 && !isProcessando) {
                 isProcessando = true
+                framesPerfeitos = 0
                 ocrProcessador.capturarEProcessar()
             }
         }
@@ -192,6 +195,34 @@ fun DocumentScanScreen(
             onFlashToggle = { flashOn = ocrProcessador.ligarFlash(flashOn) }
         )
 
+        if (!isProcessando) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                FloatingActionButton(
+                    onClick = {
+                        if (!isProcessando) {
+                            isProcessando = true
+                            framesPerfeitos = 0
+                            ocrProcessador.capturarEProcessar()
+                        }
+                    },
+                    containerColor = AccentBlue,
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_scanner),
+                        contentDescription = "Capturar manualmente"
+                    )
+                }
+            }
+        }
+
         if (isProcessando)
         {
             Box(
@@ -210,7 +241,7 @@ fun DocumentScanScreen(
                 onDismiss = { ocrResultado = null },
                 onConfirm = { confirmedResult ->
                     ocrResultado = null
-                    // Ação de sucesso
+
                 }
             )
         }
