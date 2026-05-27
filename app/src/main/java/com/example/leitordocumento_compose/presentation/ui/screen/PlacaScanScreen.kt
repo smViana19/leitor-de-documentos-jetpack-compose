@@ -1,0 +1,258 @@
+package com.example.leitordocumento_compose.presentation.ui.screen
+
+import ResultadoPlaca
+import TipoVeiculo
+import android.content.pm.ActivityInfo
+import android.widget.Toast
+import androidx.camera.view.PreviewView
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.EaseInOutSine
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.navigation.NavController
+import com.example.documentscan.DocumentType
+import com.example.documentscan.LockScreenOrientation
+import com.example.documentscan.TopFloatingControls
+import com.example.documentscan.drawBarraQualidade
+import com.example.documentscan.drawScanCornersCentered
+import com.example.leitordocumento_compose.presentation.ui.components.OcrResultadoSheet
+import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
+import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocumento
+import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
+import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlueBright
+import com.example.leitordocumento_compose.utils.OcrProcessador
+import com.example.leitordocumento_compose.utils.OcrResultado
+import kotlinx.coroutines.delay
+import java.nio.file.Files.size
+
+@Composable
+fun PlacaScanScreen(
+    navController: NavController,
+    tipoVeiculo: TipoVeiculo,
+    onHelp: () -> Unit = {}
+) {
+
+    if (tipoVeiculo == TipoVeiculo.CARRO)
+    {
+        LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE)
+    }
+    else
+    {
+        LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT)
+    }
+
+    var ocrResultado by remember { mutableStateOf<OcrResultado?>(null) }
+    var isProcessando by remember { mutableStateOf(false) }
+    var framesPerfeitos by remember { mutableIntStateOf(0) }
+    var feedbackDocumento by remember { mutableStateOf(FeedbackDocumento()) }
+
+    val contexto = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    val previewView: PreviewView = remember {
+        PreviewView(contexto).apply {
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        }
+    }
+
+    val cornerPulse by rememberInfiniteTransition(label = "corner_pulse").animateFloat(
+        initialValue = 0.85f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ), label = "corner_alpha"
+    )
+
+
+    // Reutiliza o seu OcrProcessador existente
+    val ocrProcessador = remember {
+        OcrProcessador(
+            contexto = contexto,
+            lifecycleOwner = lifecycleOwner,
+            tipoDocumentoSelecionado = { DocumentType.DOCUMENT },
+            onResultado = { resultado ->
+                isProcessando = false
+                if (resultado is OcrResultado.Placa) {
+                    ocrResultado = resultado
+                } else {
+                    // OCR não encontrou placa válida — texto não bateu com nenhum regex
+                    Toast.makeText(contexto, "Placa não reconhecida. Tente novamente.", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onError = { error ->
+                isProcessando = false
+                Toast.makeText(contexto, "Erro: $error", Toast.LENGTH_LONG).show()
+            },
+            processadorCustom = { textoOcr ->
+                val placa = PlacaOcrProcessador.processarPlaca(
+                    textoOcr = textoOcr,
+                    tipoVeiculoHint = tipoVeiculo
+                )
+                if (placa != null) OcrResultado.Placa(placa)
+                else OcrResultado.Unknown(textoOcr)
+            },
+            onFrameTexto = { textoFrame ->
+                val placaDetectada = PlacaOcrProcessador.processarPlaca(textoFrame, tipoVeiculo)
+                placaDetectada != null
+            }
+        ).also {
+            it.bindCamera(previewView) { feedback ->
+                feedbackDocumento = feedback
+                if (feedback.estado != EstadoDocumento.NENHUM) {
+                    framesPerfeitos++
+                } else {
+                    framesPerfeitos = 0
+                }
+            }
+        }
+    }
+
+
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .background(Color.Black)) {
+        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+
+        // Overlay com guia no formato de placa (mais largo e baixo)
+        PlacaScanOverlay(
+            modifier = Modifier.fillMaxSize(),
+            cornerAlpha = cornerPulse,
+            feedbackDocumento= feedbackDocumento,
+            tipoVeiculo = tipoVeiculo
+        )
+
+        TopFloatingControls(  // reutiliza o seu componente existente
+            onClose = { navController.navigateUp() },
+            onHelp = onHelp,
+            flashOn = false,
+            onFlashToggle = {}
+        )
+
+        if (isProcessando) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0x99000000)),
+                Alignment.Center
+            ) {
+                CircularProgressIndicator(color = AccentBlue)
+            }
+        }
+
+        // Sheet de resultado de placa
+        ocrResultado?.let { resultado ->
+            OcrResultadoSheet(
+                resultado = resultado,
+                onDismiss = { ocrResultado = null },
+                onConfirm = { confirmedResult ->
+                    ocrResultado = null
+
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlacaScanOverlay(
+    modifier: Modifier = Modifier,
+    cornerAlpha: Float,
+    feedbackDocumento: FeedbackDocumento,
+    tipoVeiculo: TipoVeiculo
+) {
+    val proporcao = if (tipoVeiculo == TipoVeiculo.MOTO) 0.56f else 3.08f
+    val labelTipo = if (tipoVeiculo == TipoVeiculo.MOTO) "Placa de Moto" else "Placa de Carro"
+
+
+    val label = if (tipoVeiculo == TipoVeiculo.MOTO)
+        "Posicione a placa da moto no guia"
+    else
+        "Posicione a placa do carro no guia"
+
+    val corAnimada by animateColorAsState(
+        targetValue = feedbackDocumento.corOverlay,
+        animationSpec = tween(400),
+        label = "cor_overlay"
+    )
+
+    Box(
+        modifier = modifier
+            .graphicsLayer { alpha = 0.99f }
+            .drawWithContent {
+                drawContent()
+
+                val guideHeight = size.height * 0.55f
+                val guideWidth = guideHeight * proporcao
+                    .coerceAtMost(size.width * 0.88f / guideHeight * guideHeight) // não ultrapassa a tela
+                val topLeftX = (size.width - guideWidth) / 2
+                val topLeftY = (size.height - guideHeight) / 2
+
+                val guideTopLeft = Offset(topLeftX, topLeftY)
+                val guideSize = Size(guideWidth, guideHeight)
+
+                drawRect(color = Color(0x88000000))
+                drawRect(
+                    color = Color.Transparent,
+                    topLeft = guideTopLeft,
+                    size = guideSize,
+                    blendMode = BlendMode.Clear
+                )
+                drawScanCornersCentered(
+                    color = AccentBlueBright.copy(alpha = cornerAlpha),
+                    cornerLength = 36.dp.toPx(),
+                    strokeWidth = 4.dp.toPx(),
+                    cornerRadius = 10.dp.toPx(),
+                    guideTopLeft = guideTopLeft,
+                    guideSize = guideSize
+                )
+
+                if (feedbackDocumento.progresso > 0f)
+                {
+                    drawBarraQualidade(feedbackDocumento.progresso, corAnimada)
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "Posicione a $labelTipo no guia",
+            color = Color.White,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 40.dp)
+                .background(Color(0x99000000), RoundedCornerShape(8.dp))
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+    }
+}

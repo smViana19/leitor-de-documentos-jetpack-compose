@@ -250,7 +250,7 @@ fun DocumentScanScreen(
 }
 
 @Composable
-private fun TopFloatingControls(
+fun TopFloatingControls(
     onClose: () -> Unit,
     onHelp: () -> Unit,
     flashOn: Boolean,
@@ -449,7 +449,7 @@ private fun EstadoIcone(estado: EstadoDocumento)
     Text(text = emoji, fontSize = 22.sp)
 }
 
-private fun DrawScope.drawScanCornersCentered(
+fun DrawScope.drawScanCornersCentered(
     color: Color,
     cornerLength: Float,
     strokeWidth: Float,
@@ -562,7 +562,7 @@ private fun DocumentScanScreenPreview()
 }
 
 
-private fun DrawScope.drawBarraQualidade(progresso: Float, cor: Color)
+fun DrawScope.drawBarraQualidade(progresso: Float, cor: Color)
 {
     val altBarra = 6.dp.toPx()
     val y = size.height - altBarra

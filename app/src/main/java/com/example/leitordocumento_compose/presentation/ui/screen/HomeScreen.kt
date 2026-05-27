@@ -85,12 +85,12 @@ fun HomeScreen(navController: NavController)
         TipoDocumento("Placa de Carro",
             "Escaneie a placa do veículo (Carro).",
             R.drawable.ic_carro_24,
-            Screens.TELA_SCANNER.name,
+            "${Screens.TELA_SCANNER_PLACA.name}/CARRO",
             CategoriaScanner.PLACA),
         TipoDocumento("Placa de Moto",
             "Escaneie a placa da motocicleta.",
             R.drawable.ic_carro_24,
-            Screens.TELA_SCANNER.name,
+            "${Screens.TELA_SCANNER_PLACA.name}/MOTO",
             CategoriaScanner.PLACA)
     )
 

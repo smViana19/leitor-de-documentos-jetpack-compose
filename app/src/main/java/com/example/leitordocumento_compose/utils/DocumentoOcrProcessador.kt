@@ -1,5 +1,6 @@
 package com.example.leitordocumento_compose.utils
 
+import ResultadoPlaca
 import com.example.documentscan.DocumentType
 import com.google.mlkit.vision.text.Text
 
@@ -36,6 +37,7 @@ data class DadosRG(
 sealed class OcrResultado {
     data class Cnh(val dadosCNH: DadosCNH) : OcrResultado()
     data class Rg(val dadosRG: DadosRG) : OcrResultado()
+    data class Placa(val placa: ResultadoPlaca) : OcrResultado()
     data class Unknown(val rawText: String) : OcrResultado()
 }
 

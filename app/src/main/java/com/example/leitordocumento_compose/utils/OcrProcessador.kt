@@ -17,6 +17,7 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.example.documentscan.DocumentType
+import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
 import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocumento
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -41,7 +42,10 @@ class OcrProcessador(
     private val lifecycleOwner: LifecycleOwner,
     private val tipoDocumentoSelecionado: () -> DocumentType,
     private val onResultado: (OcrResultado) -> Unit,
-    private val onError: (String) -> Unit
+    private val onError: (String) -> Unit,
+    private val processadorCustom: ((String) -> OcrResultado)? = null,
+    private val onFrameTexto: ((String) -> Boolean)? = null
+
 ) {
     private val reconhecedorTexto = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -81,7 +85,34 @@ class OcrProcessador(
             val analiseImagem = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
-                .also { it.setAnalyzer(executor, analisador) }
+                .also { imageAnalysis ->
+                    if (onFrameTexto != null) {
+                        // Analisador leve de texto para placas
+                        imageAnalysis.setAnalyzer(executor, AnalisadorTextoFrame(
+                            reconhecedorTexto = reconhecedorTexto,
+                            onTexto = { texto ->
+                                val deveCapturar = onFrameTexto.invoke(texto)
+                                if (deveCapturar && !capturasEmAndamento) {
+                                    capturarEProcessar()
+                                }
+                                // Feedback visual simples baseado no texto
+                                val temPlaca = texto.length in 5..10
+                                onFeedback(
+                                    FeedbackDocumento(
+                                        estado = if (temPlaca) EstadoDocumento.PERFEITO else EstadoDocumento.DETECTANDO,
+                                        mensagem = if (temPlaca) "Placa detectada!" else "Procurando placa...",
+                                        progresso = if (temPlaca) 1f else 0f
+                                    )
+                                )
+                            }
+                        ))
+                    } else {
+                        imageAnalysis.setAnalyzer(executor, AnalisadorFrame(
+                            tipoDocumento = tipoDocumentoSelecionado,
+                            onFeedback = onFeedback
+                        ))
+                    }
+                }
             try {
                 provider.unbindAll()
                 camera = provider.bindToLifecycle(
@@ -178,9 +209,9 @@ class OcrProcessador(
             reconhecedorTexto.process(image)
                 .addOnSuccessListener { mlText ->
                     Log.d("OCR_RAW", "Frame $index:\n${mlText.text}")
-                    val resultado = DocumentoOcrProcessador.processarDocumento(
-                        mlText, tipoDocumentoSelecionado()
-                    )
+                    val resultado = processadorCustom?.invoke(mlText.text)
+                        ?: DocumentoOcrProcessador.processarDocumento(mlText, tipoDocumentoSelecionado())
+
                     synchronized(resultados) {
                         resultados.add(resultado)
                         processados++
@@ -213,13 +244,28 @@ class OcrProcessador(
 
         val cnhs = resultados.filterIsInstance<OcrResultado.Cnh>()
         val rgs = resultados.filterIsInstance<OcrResultado.Rg>()
+        val placas = resultados.filterIsInstance<OcrResultado.Placa>()
 
         return when {
             cnhs.size >= resultados.size / 2 -> mergeCnh(cnhs)
             rgs.size >= resultados.size / 2 -> mergeRg(rgs)
+            placas.size >= resultados.size / 2 -> mergePlaca(placas) // ← novo
             else -> resultados.maxByOrNull { pontuarResultado(it) } ?: resultados[0]
+            //      ↑ antes estava um bloco vazio {} que retornava Unit
         }
     }
+
+    private fun mergePlaca(placas: List<OcrResultado.Placa>): OcrResultado.Placa {
+        // Retorna a placa que apareceu com mais frequência entre os frames
+        return placas
+            .groupBy { it.placa }
+            .maxByOrNull { it.value.size }
+            ?.value
+            ?.first()
+            ?: placas[0]
+    }
+
+
 
     private fun mergeCnh(cnhs: List<OcrResultado.Cnh>): OcrResultado.Cnh {
         // Ordena por pontuação descendente — o melhor é a base
@@ -270,10 +316,12 @@ class OcrProcessador(
         return OcrResultado.Rg(base)
     }
 
-    private fun pontuarResultado(r: OcrResultado) = when (r) {
+    private fun pontuarResultado(r: OcrResultado): Int = when (r) {
         is OcrResultado.Cnh -> pontuarCnh(r.dadosCNH)
         is OcrResultado.Rg -> pontuarRg(r.dadosRG)
+        is OcrResultado.Placa -> 1  // placa válida vale alguma coisa
         is OcrResultado.Unknown -> 0
+        // ↑ com o sealed class completo, o else não é mais necessário
     }
 
     private fun pontuarCnh(d: DadosCNH): Int {

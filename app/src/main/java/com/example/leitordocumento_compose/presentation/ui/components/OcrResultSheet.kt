@@ -1,5 +1,6 @@
 package com.example.leitordocumento_compose.presentation.ui.components
 
+import ResultadoPlaca
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -102,7 +103,9 @@ fun OcrResultadoSheet(
             when (resultado) {
                 is OcrResultado.Cnh -> CnhCampos(resultado.dadosCNH)
                 is OcrResultado.Rg -> RgCampos(resultado.dadosRG)
+                is OcrResultado.Placa -> PlacaCampo(resultado.placa)
                 is OcrResultado.Unknown -> RawTextCard(resultado.rawText)
+
             }
             Spacer(modifier = Modifier.height(24.dp))
             Row(
@@ -137,6 +140,9 @@ private fun CnhCampos(dados: DadosCNH) {
         OcrField("RG",               dados.rg)
         OcrField("Data Nascimento",  dados.dataNascimento)
         OcrField("Nº Registro",      dados.numeroRegistro)
+        OcrField("Orgao Emissor", dados.orgaoEmissor)
+        OcrField("Filiacao", dados.filiacao)
+        OcrField("Primeira Habilitacao", dados.primeiraHabilitacao)
         OcrField("Data Emissão",     dados.dataEmissao)
         OcrField("Validade",         dados.dataValidade)
         OcrField("Categoria",        dados.categoria)
@@ -154,6 +160,15 @@ private fun RgCampos(data: DadosRG) {
         OcrField("Nome do Pai",     data.nomePai)
         OcrField("Naturalidade",    data.naturalidade)
         OcrField("Data Emissão",    data.dataEmissao)
+    }
+}
+
+@Composable
+private fun PlacaCampo(data: ResultadoPlaca)
+{
+    FieldCard {
+        OcrField("Placa", data.placa)
+        OcrField("Placa Normalizada", data.placaNormalizada)
     }
 }
 

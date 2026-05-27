@@ -6,12 +6,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHost
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.documentscan.DocumentScanScreen
 import com.example.leitordocumento_compose.presentation.ui.screen.FormScreen
 import com.example.leitordocumento_compose.presentation.ui.screen.HomeScreen
+import com.example.leitordocumento_compose.presentation.ui.screen.PlacaScanScreen
 import com.example.leitordocumento_compose.presentation.ui.screen.SettingScreen
 
 
@@ -62,6 +65,19 @@ fun MainNavigation(inicioNavegacao: String) {
             composable(route = Screens.TELA_CONFIGURACAO.name) {
                 SettingScreen()
             }
+            composable(
+                route = "${Screens.TELA_SCANNER_PLACA.name}/{tipoVeiculo}",
+                arguments = listOf(navArgument("tipoVeiculo") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val tipoStr = backStackEntry.arguments?.getString("tipoVeiculo") ?: "CARRO"
+                val tipoVeiculo = TipoVeiculo.valueOf(tipoStr)
+
+                PlacaScanScreen(
+                    navController = navController,
+                    tipoVeiculo = tipoVeiculo
+                )
+            }
+
         }
 
     })
