@@ -64,7 +64,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.leitordocumento_compose.R
+import com.example.leitordocumento_compose.data.OcrResultado
 import com.example.leitordocumento_compose.presentation.ui.components.OcrResultadoSheet
+import com.example.leitordocumento_compose.presentation.ui.navigation.navegarParaFormulario
 import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
 import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocumento
 import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
@@ -73,13 +75,11 @@ import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
 import com.example.leitordocumento_compose.presentation.ui.theme.IndicatorActive
 import com.example.leitordocumento_compose.presentation.ui.theme.TextPrimary
 import com.example.leitordocumento_compose.utils.OcrProcessador
-import com.example.leitordocumento_compose.utils.OcrResultado
 import kotlinx.coroutines.delay
 import androidx.compose.ui.tooling.preview.Preview as ComposablePreview
 
 
-enum class DocumentType(val label: String)
-{
+enum class DocumentType(val label: String) {
     ID_CARD("ID CARD"),
     DOCUMENT("DOCUMENT"),
     BOOK("BOOK"),
@@ -87,8 +87,7 @@ enum class DocumentType(val label: String)
 }
 
 @Composable
-fun LockScreenOrientation(orientation: Int)
-{
+fun LockScreenOrientation(orientation: Int) {
     val context = LocalContext.current
     DisposableEffect(Unit) {
         val activity = context as? Activity ?: return@DisposableEffect onDispose {}
@@ -105,13 +104,11 @@ fun LockScreenOrientation(orientation: Int)
 fun DocumentScanScreen(
     navController: NavController,
     onHelp: () -> Unit = {},
-)
-{
+) {
     LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE)
     var feedbackDocumento by remember { mutableStateOf(FeedbackDocumento()) }
 
 
-    var ocrResultado by remember { mutableStateOf<OcrResultado?>(null) }
     var isProcessando by remember { mutableStateOf(false) }
     var framesPerfeitos by remember { mutableIntStateOf(0) }
     val contexto = LocalContext.current
@@ -131,7 +128,7 @@ fun DocumentScanScreen(
             tipoDocumentoSelecionado = { DocumentType.DOCUMENT },
             onResultado = { resultado ->
                 isProcessando = false
-                ocrResultado = resultado
+                navController.navegarParaFormulario(resultado)
             },
             onError = { error ->
                 isProcessando = false
@@ -141,7 +138,7 @@ fun DocumentScanScreen(
         ).also {
             it.bindCamera(previewView) { feedback ->
                 feedbackDocumento = feedback
-                if(feedback.estado == EstadoDocumento.PERFEITO) framesPerfeitos++
+                if (feedback.estado == EstadoDocumento.PERFEITO) framesPerfeitos++
                 else framesPerfeitos = 0
             }
         }
@@ -223,8 +220,7 @@ fun DocumentScanScreen(
             }
         }
 
-        if (isProcessando)
-        {
+        if (isProcessando) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -233,17 +229,6 @@ fun DocumentScanScreen(
             ) {
                 CircularProgressIndicator(color = AccentBlue)
             }
-        }
-
-        ocrResultado?.let { resultado ->
-            OcrResultadoSheet(
-                resultado = resultado,
-                onDismiss = { ocrResultado = null },
-                onConfirm = { confirmedResult ->
-                    ocrResultado = null
-
-                }
-            )
         }
     }
 
@@ -255,8 +240,7 @@ fun TopFloatingControls(
     onHelp: () -> Unit,
     flashOn: Boolean,
     onFlashToggle: () -> Unit
-)
-{
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -349,8 +333,7 @@ private fun ScanOverlay(
     modifier: Modifier = Modifier,
     cornerAlpha: Float,
     feedback: FeedbackDocumento = FeedbackDocumento()
-)
-{
+) {
     val corAnimada by animateColorAsState(
         targetValue = feedback.corOverlay,
         animationSpec = tween(400),
@@ -394,8 +377,7 @@ private fun ScanOverlay(
                     guideSize = guideSize
                 )
 
-                if (feedback.progresso > 0f)
-                {
+                if (feedback.progresso > 0f) {
                     drawBarraQualidade(
                         progresso = feedback.progresso,
                         cor = corAnimada
@@ -415,8 +397,7 @@ private fun ScanOverlay(
                 transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
                 label = "mensagem_feedback"
             ) { msg ->
-                if (msg.isNotEmpty())
-                {
+                if (msg.isNotEmpty()) {
                     Text(
                         text = msg,
                         color = Color.White,
@@ -435,10 +416,8 @@ private fun ScanOverlay(
 
 
 @Composable
-private fun EstadoIcone(estado: EstadoDocumento)
-{
-    val (emoji, cor) = when (estado)
-    {
+private fun EstadoIcone(estado: EstadoDocumento) {
+    val (emoji, cor) = when (estado) {
         EstadoDocumento.NENHUM -> "" to Color(0xFF8A9BB5)
         EstadoDocumento.DETECTANDO -> "" to Color(0xFF8A9BB5)
         EstadoDocumento.ALINHANDO -> "" to Color(0xFF4A90D9)
@@ -456,8 +435,7 @@ fun DrawScope.drawScanCornersCentered(
     cornerRadius: Float,
     guideTopLeft: Offset,
     guideSize: Size
-)
-{
+) {
     val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
 
     val left = guideTopLeft.x
@@ -475,16 +453,20 @@ fun DrawScope.drawScanCornersCentered(
         size = Size(cornerRadius * 2, cornerRadius * 2),
         style = stroke
     )
-    drawLine(color,
+    drawLine(
+        color,
         Offset(left + cornerRadius, top),
         Offset(left + cornerRadius + cornerLength, top),
         strokeWidth,
-        StrokeCap.Round)
-    drawLine(color,
+        StrokeCap.Round
+    )
+    drawLine(
+        color,
         Offset(left, top + cornerRadius),
         Offset(left, top + cornerRadius + cornerLength),
         strokeWidth,
-        StrokeCap.Round)
+        StrokeCap.Round
+    )
 
     // Top-right
     drawArc(
@@ -496,16 +478,20 @@ fun DrawScope.drawScanCornersCentered(
         size = Size(cornerRadius * 2, cornerRadius * 2),
         style = stroke
     )
-    drawLine(color,
+    drawLine(
+        color,
         Offset(right - cornerRadius, top),
         Offset(right - cornerRadius - cornerLength, top),
         strokeWidth,
-        StrokeCap.Round)
-    drawLine(color,
+        StrokeCap.Round
+    )
+    drawLine(
+        color,
         Offset(right, top + cornerRadius),
         Offset(right, top + cornerRadius + cornerLength),
         strokeWidth,
-        StrokeCap.Round)
+        StrokeCap.Round
+    )
 
     // Bottom-left
     drawArc(
@@ -517,16 +503,20 @@ fun DrawScope.drawScanCornersCentered(
         size = Size(cornerRadius * 2, cornerRadius * 2),
         style = stroke
     )
-    drawLine(color,
+    drawLine(
+        color,
         Offset(left + cornerRadius, bottom),
         Offset(left + cornerRadius + cornerLength, bottom),
         strokeWidth,
-        StrokeCap.Round)
-    drawLine(color,
+        StrokeCap.Round
+    )
+    drawLine(
+        color,
         Offset(left, bottom - cornerRadius),
         Offset(left, bottom - cornerRadius - cornerLength),
         strokeWidth,
-        StrokeCap.Round)
+        StrokeCap.Round
+    )
 
     // Bottom-right
     drawArc(
@@ -538,23 +528,26 @@ fun DrawScope.drawScanCornersCentered(
         size = Size(cornerRadius * 2, cornerRadius * 2),
         style = stroke
     )
-    drawLine(color,
+    drawLine(
+        color,
         Offset(right - cornerRadius, bottom),
         Offset(right - cornerRadius - cornerLength, bottom),
         strokeWidth,
-        StrokeCap.Round)
-    drawLine(color,
+        StrokeCap.Round
+    )
+    drawLine(
+        color,
         Offset(right, bottom - cornerRadius),
         Offset(right, bottom - cornerRadius - cornerLength),
         strokeWidth,
-        StrokeCap.Round)
+        StrokeCap.Round
+    )
 
 }
 
 @ComposablePreview(showBackground = true, backgroundColor = 0xFF0A1628)
 @Composable
-private fun DocumentScanScreenPreview()
-{
+private fun DocumentScanScreenPreview() {
     val navController = rememberNavController()
     AppTema {
         DocumentScanScreen(navController)
@@ -562,8 +555,7 @@ private fun DocumentScanScreenPreview()
 }
 
 
-fun DrawScope.drawBarraQualidade(progresso: Float, cor: Color)
-{
+fun DrawScope.drawBarraQualidade(progresso: Float, cor: Color) {
     val altBarra = 6.dp.toPx()
     val y = size.height - altBarra
     drawRect(color = Color(0x33FFFFFF), topLeft = Offset(0f, y), size = Size(size.width, altBarra))

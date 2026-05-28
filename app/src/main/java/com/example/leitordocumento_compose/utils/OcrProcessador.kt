@@ -17,6 +17,9 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.example.documentscan.DocumentType
+import com.example.leitordocumento_compose.data.DadosCNH
+import com.example.leitordocumento_compose.data.DadosRG
+import com.example.leitordocumento_compose.data.OcrResultado
 import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
 import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocumento
 import com.google.mlkit.vision.common.InputImage
@@ -42,11 +45,15 @@ class OcrProcessador(
     private val lifecycleOwner: LifecycleOwner,
     private val tipoDocumentoSelecionado: () -> DocumentType,
     private val onResultado: (OcrResultado) -> Unit,
+    private val onProgresso: ((Float) -> Unit)? = null,
     private val onError: (String) -> Unit,
     private val processadorCustom: ((String) -> OcrResultado)? = null,
     private val onFrameTexto: ((String) -> Boolean)? = null
 
 ) {
+
+    private val SCORE_EARLY_EXIT = 14
+
     private val reconhecedorTexto = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private var imagemCaptura: ImageCapture? = null
@@ -150,8 +157,6 @@ class OcrProcessador(
             return
         }
         capturarMultiplos(captura, TOTAL_CAPTURAS, emptyList())
-
-
     }
 
     private fun capturarMultiplos(
@@ -163,6 +168,11 @@ class OcrProcessador(
             processarMultiplosBitmaps(bitmapsAcumulados)
             return
         }
+
+        val total = TOTAL_CAPTURAS
+        val feitos = total - restantes
+        onProgresso?.invoke(feitos.toFloat() / total)
+
         captura.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
             override fun onCaptureSuccess(proxy: ImageProxy) {
                 try {
@@ -171,9 +181,16 @@ class OcrProcessador(
                     proxy.close()
                     val novos = bitmapsAcumulados + bitmap
 
-                    if (restantes > 1) {
-                        Thread.sleep(DELAY_ENTRE_CAPTURAS_MS)
-                        capturarMultiplos(captura, restantes - 1, novos)
+                    if (novos.size >= 1 && restantes > 1) {
+                        processarFrameRapido(novos.last()) { score ->
+                            if (score >= SCORE_EARLY_EXIT) {
+                                // Score alto o suficiente — processa o que já temos
+                                processarMultiplosBitmaps(novos)
+                            } else {
+                                Thread.sleep(DELAY_ENTRE_CAPTURAS_MS)
+                                capturarMultiplos(captura, restantes - 1, novos)
+                            }
+                        }
                     } else {
                         capturarMultiplos(captura, 0, novos)
                     }
@@ -197,6 +214,20 @@ class OcrProcessador(
                 }
             }
         })
+    }
+
+    private fun processarFrameRapido(bitmap: Bitmap, onScore: (Int) -> Unit) {
+        val image = InputImage.fromBitmap(bitmap, 0)
+        reconhecedorTexto.process(image)
+            .addOnSuccessListener { mlText ->
+                val resultado = processadorCustom?.invoke(mlText.text)
+                    ?: DocumentoOcrProcessador.processarDocumento(
+                        mlText,
+                        tipoDocumentoSelecionado()
+                    )
+                onScore(pontuarResultado(resultado))
+            }
+            .addOnFailureListener { onScore(0) }
     }
 
     private fun processarMultiplosBitmaps(bitmaps: List<Bitmap>) {
@@ -239,7 +270,7 @@ class OcrProcessador(
     }
 
     private fun selecionarMelhorResultado(resultados: List<OcrResultado>): OcrResultado {
-        if (resultados.isEmpty()) return OcrResultado.Unknown("")
+        if (resultados.isEmpty()) return OcrResultado.Desconhecido("")
         if (resultados.size == 1) return resultados[0]
 
         val cnhs = resultados.filterIsInstance<OcrResultado.Cnh>()
@@ -258,7 +289,7 @@ class OcrProcessador(
     private fun mergePlaca(placas: List<OcrResultado.Placa>): OcrResultado.Placa {
         // Retorna a placa que apareceu com mais frequência entre os frames
         return placas
-            .groupBy { it.placa }
+            .groupBy { it.dadosPlaca }
             .maxByOrNull { it.value.size }
             ?.value
             ?.first()
@@ -320,35 +351,35 @@ class OcrProcessador(
         is OcrResultado.Cnh -> pontuarCnh(r.dadosCNH)
         is OcrResultado.Rg -> pontuarRg(r.dadosRG)
         is OcrResultado.Placa -> 1  // placa válida vale alguma coisa
-        is OcrResultado.Unknown -> 0
-        // ↑ com o sealed class completo, o else não é mais necessário
+        is OcrResultado.Desconhecido -> 0
+
     }
 
-    private fun pontuarCnh(d: DadosCNH): Int {
+    private fun pontuarCnh(dadosCNH: DadosCNH): Int {
         var score = 0
-        if (!d.nome.isNullOrBlank()) score += 3
-        if (!d.cpf.isNullOrBlank()) score += 3
-        if (!d.rg.isNullOrBlank()) score += 2
-        if (!d.dataNascimento.isNullOrBlank()) score += 2
-        if (!d.dataValidade.isNullOrBlank()) score += 2
-        if (!d.dataEmissao.isNullOrBlank()) score += 1
-        if (!d.numeroRegistro.isNullOrBlank()) score += 2
-        if (!d.categoria.isNullOrBlank()) score += 2
-        if (!d.localNascimento.isNullOrBlank()) score += 1
-        if (!d.orgaoEmissor.isNullOrBlank()) score += 1
-        if (!d.filiacao.isNullOrBlank()) score += 1
+        if (!dadosCNH.nome.isNullOrBlank()) score += 3
+        if (!dadosCNH.cpf.isNullOrBlank()) score += 3
+        if (!dadosCNH.rg.isNullOrBlank()) score += 2
+        if (!dadosCNH.dataNascimento.isNullOrBlank()) score += 2
+        if (!dadosCNH.dataValidade.isNullOrBlank()) score += 2
+        if (!dadosCNH.dataEmissao.isNullOrBlank()) score += 1
+        if (!dadosCNH.numeroRegistro.isNullOrBlank()) score += 2
+        if (!dadosCNH.categoria.isNullOrBlank()) score += 2
+        if (!dadosCNH.localNascimento.isNullOrBlank()) score += 1
+        if (!dadosCNH.orgaoEmissor.isNullOrBlank()) score += 1
+        if (!dadosCNH.filiacao.isNullOrBlank()) score += 1
         return score
     }
 
-    private fun pontuarRg(d: DadosRG): Int {
+    private fun pontuarRg(dadosRG: DadosRG): Int {
         var score = 0
-        if (!d.nome.isNullOrBlank()) score += 3
-        if (!d.rg.isNullOrBlank()) score += 3
-        if (!d.cpf.isNullOrBlank()) score += 3
-        if (!d.dataNascimento.isNullOrBlank()) score += 2
-        if (!d.nomeMae.isNullOrBlank()) score += 2
-        if (!d.nomePai.isNullOrBlank()) score += 1
-        if (!d.naturalidade.isNullOrBlank()) score += 1
+        if (!dadosRG.nome.isNullOrBlank()) score += 3
+        if (!dadosRG.rg.isNullOrBlank()) score += 3
+        if (!dadosRG.cpf.isNullOrBlank()) score += 3
+        if (!dadosRG.dataNascimento.isNullOrBlank()) score += 2
+        if (!dadosRG.nomeMae.isNullOrBlank()) score += 2
+        if (!dadosRG.nomePai.isNullOrBlank()) score += 1
+        if (!dadosRG.naturalidade.isNullOrBlank()) score += 1
         return score
     }
 

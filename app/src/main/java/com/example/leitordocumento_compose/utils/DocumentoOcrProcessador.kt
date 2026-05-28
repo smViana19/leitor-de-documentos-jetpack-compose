@@ -1,45 +1,11 @@
 package com.example.leitordocumento_compose.utils
 
-import ResultadoPlaca
 import com.example.documentscan.DocumentType
+import com.example.leitordocumento_compose.data.DadosCNH
+import com.example.leitordocumento_compose.data.DadosRG
+import com.example.leitordocumento_compose.data.OcrResultado
 import com.google.mlkit.vision.text.Text
 
-data class DadosCNH(
-    val nome: String? = null,
-    val cpf: String? = null,
-    val rg: String? = null,
-    val dataNascimento: String? = null,
-    val localNascimento: String? = null,
-    val numeroRegistro: String? = null,
-    val primeiraHabilitacao: String? = null,
-    val dataEmissao: String? = null,
-    val dataValidade: String? = null,
-    val categoria: String? = null,
-    val orgaoEmissor: String? = null,
-    val filiacao: String? = null,
-    val nacionalidade: String? = null,
-    val localidade: String? = null,
-    val rawText: String = ""
-)
-
-data class DadosRG(
-    val nome: String? = null,
-    val rg: String? = null,
-    val cpf: String? = null,
-    val dataNascimento: String? = null,
-    val nomeMae: String? = null,
-    val nomePai: String? = null,
-    val naturalidade: String? = null,
-    val dataEmissao: String? = null,
-    val rawText: String = ""
-)
-
-sealed class OcrResultado {
-    data class Cnh(val dadosCNH: DadosCNH) : OcrResultado()
-    data class Rg(val dadosRG: DadosRG) : OcrResultado()
-    data class Placa(val placa: ResultadoPlaca) : OcrResultado()
-    data class Unknown(val rawText: String) : OcrResultado()
-}
 
 object DocumentoOcrProcessador {
 
@@ -71,7 +37,7 @@ object DocumentoOcrProcessador {
     /** Valida se uma string limpa é uma categoria real */
     private val categoriasValidas = setOf(
         "A", "B", "C", "D", "E",
-        "AB", "AC", "AD", "AE", "ACC"
+        "AB", "AC", "AD", "AE"
     )
 
     /** Rótulos de campo impressos nas CNHs brasileiras (novos e antigos modelos) */
@@ -94,7 +60,7 @@ object DocumentoOcrProcessador {
         return when {
             isCnh(textoCompleto)  -> OcrResultado.Cnh(processarCnh(linhas, textoCompleto, mlKitTexto))
             isRg(textoCompleto)   -> OcrResultado.Rg(processarRg(linhas, textoCompleto))
-            else                  -> OcrResultado.Unknown(rawText = textoCompleto)
+            else                  -> OcrResultado.Desconhecido(rawText = textoCompleto)
         }
     }
 

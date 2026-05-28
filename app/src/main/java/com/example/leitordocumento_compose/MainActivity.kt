@@ -45,6 +45,7 @@ import android.Manifest
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.painterResource
+import com.example.leitordocumento_compose.data.local.database.AppContainer
 import com.example.leitordocumento_compose.presentation.ui.navigation.MainNavigation
 import com.example.leitordocumento_compose.presentation.ui.navigation.Screens
 
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppContainer.init(this)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
                 lightScrim = Color.Transparent.toArgb(),

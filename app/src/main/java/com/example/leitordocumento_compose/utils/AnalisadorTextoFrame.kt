@@ -34,7 +34,7 @@ class AnalisadorTextoFrame(
             .addOnSuccessListener { mlTexto ->
                 onTexto(mlTexto.text)
             }
-            .addOnSuccessListener { imagemProxy.close() }
+            .addOnCompleteListener { imagemProxy.close() }
     }
 
 

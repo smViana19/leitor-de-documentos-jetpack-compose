@@ -29,9 +29,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.leitordocumento_compose.utils.DadosCNH
-import com.example.leitordocumento_compose.utils.DadosRG
-import com.example.leitordocumento_compose.utils.OcrResultado
+import com.example.leitordocumento_compose.data.DadosCNH
+import com.example.leitordocumento_compose.data.DadosRG
+import com.example.leitordocumento_compose.data.OcrResultado
 
 private val CardBg = Color(0xFF111827)
 private val AccentBlue = Color(0xFF4A90D9)
@@ -103,8 +103,8 @@ fun OcrResultadoSheet(
             when (resultado) {
                 is OcrResultado.Cnh -> CnhCampos(resultado.dadosCNH)
                 is OcrResultado.Rg -> RgCampos(resultado.dadosRG)
-                is OcrResultado.Placa -> PlacaCampo(resultado.placa)
-                is OcrResultado.Unknown -> RawTextCard(resultado.rawText)
+                is OcrResultado.Placa -> PlacaCampo(resultado.dadosPlaca)
+                is OcrResultado.Desconhecido -> RawTextCard(resultado.rawText)
 
             }
             Spacer(modifier = Modifier.height(24.dp))

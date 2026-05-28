@@ -1,6 +1,6 @@
 package com.example.leitordocumento_compose.presentation.ui.screen
 
-import ResultadoPlaca
+import PlacaOcrProcessador
 import TipoVeiculo
 import android.content.pm.ActivityInfo
 import android.widget.Toast
@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,9 +50,7 @@ import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocume
 import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
 import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlueBright
 import com.example.leitordocumento_compose.utils.OcrProcessador
-import com.example.leitordocumento_compose.utils.OcrResultado
-import kotlinx.coroutines.delay
-import java.nio.file.Files.size
+import com.example.leitordocumento_compose.data.OcrResultado
 
 @Composable
 fun PlacaScanScreen(
@@ -120,7 +117,7 @@ fun PlacaScanScreen(
                     tipoVeiculoHint = tipoVeiculo
                 )
                 if (placa != null) OcrResultado.Placa(placa)
-                else OcrResultado.Unknown(textoOcr)
+                else OcrResultado.Desconhecido(textoOcr)
             },
             onFrameTexto = { textoFrame ->
                 val placaDetectada = PlacaOcrProcessador.processarPlaca(textoFrame, tipoVeiculo)

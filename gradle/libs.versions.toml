@@ -1,13 +1,15 @@
 [versions]
-agp = "9.1.1"
-coreKtx = "1.18.0"
+agp = "8.13.2"
+coreKtx = "1.17.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
-lifecycleRuntimeKtx = "2.6.1"
+lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.13.0"
-kotlin = "2.2.10"
-composeBom = "2026.02.01"
+kotlin = "2.0.21"
+hiltCommon = "1.2.0"
+hiltAndroid = "2.52"
+composeBom = "2024.10.01"
 cameraView = "1.6.0"
 cameraLifecycle = "1.6.0"
 cameraCore = "1.3.4"
@@ -16,6 +18,9 @@ navigationCompose = "2.7.7"
 textRecognition = "16.0.1"
 navigationComposeVersion = "2.9.8"
 animationCore = "1.11.2"
+roomRuntime = "2.6.1"
+retrofit = "2.11.0"
+coreKtxVersion = "1.18.0"
 
 
 [libraries]
@@ -38,11 +43,19 @@ androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycl
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "cameraCore" }
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraCamera2" }
 androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
+retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
+retrofit-gson-convertor = { module = "com.squareup.retrofit2:converter-gson", version = "2.9.0" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomRuntime" }
+androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "roomRuntime" }
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "roomRuntime" }
+hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hiltAndroid" }
+hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hiltAndroid" }
 
 text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "textRecognition" }
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationComposeVersion" }
 androidx-compose-animation-core = { group = "androidx.compose.animation", name = "animation-core", version.ref = "animationCore" }
+core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtxVersion" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-

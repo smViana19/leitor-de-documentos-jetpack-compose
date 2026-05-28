@@ -188,11 +188,6 @@ fun Titulo()
             .fillMaxWidth()
             .padding(horizontal = 32.dp)
     ) {
-        Text(
-            text = "INÍCIO",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "Novo Escaneamento",
