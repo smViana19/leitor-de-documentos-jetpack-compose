@@ -48,6 +48,7 @@ android {
 dependencies {
 
     implementation("androidx.concurrent:concurrent-futures-ktx:1.1.0")
+    implementation("com.google.guava:guava:33.2.1-android")
 
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.room.runtime)

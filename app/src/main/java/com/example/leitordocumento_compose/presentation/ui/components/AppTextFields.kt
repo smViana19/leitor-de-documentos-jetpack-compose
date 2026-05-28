@@ -50,17 +50,7 @@ fun Campo(
             keyboardOptions = KeyboardOptions(keyboardType = kb, capitalization = cap),
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = MaterialTheme.colorScheme.primary,
-                unfocusedTextColor = MaterialTheme.colorScheme.primary,
-                focusedContainerColor = MaterialTheme.colorScheme.onSurface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.onSurface,
-                focusedBorderColor = if (alerta) Amber else com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue,
-                unfocusedBorderColor = if (alerta) Amber.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primary,
-                focusedLabelColor = if (alerta) Amber else com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue,
-                unfocusedLabelColor = if (alerta) Amber else TextSec,
-                cursorColor = com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
-            )
+
         )
         if (alerta && !msgAlerta.isNullOrBlank()) {
             Text(

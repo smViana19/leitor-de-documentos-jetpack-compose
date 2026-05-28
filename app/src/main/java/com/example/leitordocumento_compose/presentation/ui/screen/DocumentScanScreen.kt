@@ -42,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +66,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.leitordocumento_compose.R
 import com.example.leitordocumento_compose.data.OcrResultado
+import com.example.leitordocumento_compose.data.local.repository.AppRepository
 import com.example.leitordocumento_compose.presentation.ui.components.OcrResultadoSheet
 import com.example.leitordocumento_compose.presentation.ui.navigation.navegarParaFormulario
 import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
@@ -76,6 +78,7 @@ import com.example.leitordocumento_compose.presentation.ui.theme.IndicatorActive
 import com.example.leitordocumento_compose.presentation.ui.theme.TextPrimary
 import com.example.leitordocumento_compose.utils.OcrProcessador
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.tooling.preview.Preview as ComposablePreview
 
 
@@ -108,6 +111,8 @@ fun DocumentScanScreen(
     LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE)
     var feedbackDocumento by remember { mutableStateOf(FeedbackDocumento()) }
 
+    val scope = rememberCoroutineScope()
+    val repository = remember { AppRepository.fromAppContainer() }
 
     var isProcessando by remember { mutableStateOf(false) }
     var framesPerfeitos by remember { mutableIntStateOf(0) }
@@ -128,7 +133,14 @@ fun DocumentScanScreen(
             tipoDocumentoSelecionado = { DocumentType.DOCUMENT },
             onResultado = { resultado ->
                 isProcessando = false
-                navController.navegarParaFormulario(resultado)
+                scope.launch {
+                    val id = when(val salvo = repository.salvarResultadoOcr(resultado)) {
+                        is AppRepository.Salvo.Cnh -> salvo.id
+                        is AppRepository.Salvo.Placa -> salvo.id
+                        is AppRepository.Salvo.Rg -> salvo.id
+                    }
+                    navController.navegarParaFormulario(resultado, id)
+                }
             },
             onError = { error ->
                 isProcessando = false

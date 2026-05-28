@@ -1,6 +1,7 @@
 package com.example.leitordocumento_compose.presentation.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,22 +30,27 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.leitordocumento_compose.R
 import com.example.leitordocumento_compose.data.DadosCNH
+import com.example.leitordocumento_compose.data.local.repository.AppRepository
 import com.example.leitordocumento_compose.presentation.ui.components.Campo
 import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
+import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
 
 @Composable
 fun FormularioCnhScreen(
@@ -52,18 +59,50 @@ fun FormularioCnhScreen(
     onConfirm: (DadosCNH) -> Unit,
     onReler: () -> Unit
 ) {
-    var nome            by remember { mutableStateOf(dados?.nome ?: "") }
-    var cpf             by remember { mutableStateOf(dados?.cpf ?: "") }
-    var rg              by remember { mutableStateOf(dados?.rg ?: "") }
-    var orgaoEmissor    by remember { mutableStateOf(dados?.orgaoEmissor ?: "") }
-    var registro        by remember { mutableStateOf(dados?.numeroRegistro ?: "") }
-    var categoria       by remember { mutableStateOf(dados?.categoria ?: "") }
-    var primeiraHab     by remember { mutableStateOf(dados?.primeiraHabilitacao ?: "") }
-    var dataEmissao     by remember { mutableStateOf(dados?.dataEmissao ?: "") }
-    var dataValidade    by remember { mutableStateOf(dados?.dataValidade ?: "") }
-    var dataNascimento  by remember { mutableStateOf(dados?.dataNascimento ?: "") }
-    var localNascimento by remember { mutableStateOf(dados?.localNascimento ?: "") }
-    var filiacao        by remember { mutableStateOf(dados?.filiacao ?: "") }
+
+    val repository = remember { AppRepository.fromAppContainer() }
+    var dados by remember { mutableStateOf<DadosCNH?>(null) }
+
+    LaunchedEffect(id) {
+        val entity = repository.buscarCnh(id)
+        dados = entity?.let {
+            DadosCNH(
+                nome = it.nome,
+                cpf = it.cpf,
+                rg = it.rg,
+                orgaoEmissor = it.orgaoEmissor,
+                numeroRegistro = it.numeroRegistro,
+                categoria = it.categoria,
+                primeiraHabilitacao = it.primeiraHabilitacao,
+                dataEmissao = it.dataEmissao,
+                dataValidade = it.dataValidade,
+                dataNascimento = it.dataNascimento,
+                localNascimento = it.localNascimento,
+                filiacao = it.filiacao,
+                rawText = it.rawText ?: ""
+            )
+        }
+    }
+
+    if(dados == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    var nome            by remember(dados) { mutableStateOf(dados?.nome ?: "") }
+    var cpf             by remember(dados) { mutableStateOf(dados?.cpf ?: "") }
+    var rg              by remember(dados) { mutableStateOf(dados?.rg ?: "") }
+    var orgaoEmissor    by remember(dados) { mutableStateOf(dados?.orgaoEmissor ?: "") }
+    var registro        by remember(dados) { mutableStateOf(dados?.numeroRegistro ?: "") }
+    var categoria       by remember(dados) { mutableStateOf(dados?.categoria ?: "") }
+    var primeiraHab     by remember(dados) { mutableStateOf(dados?.primeiraHabilitacao ?: "") }
+    var dataEmissao     by remember(dados) { mutableStateOf(dados?.dataEmissao ?: "") }
+    var dataValidade    by remember(dados) { mutableStateOf(dados?.dataValidade ?: "") }
+    var dataNascimento  by remember(dados) { mutableStateOf(dados?.dataNascimento ?: "") }
+    var localNascimento by remember(dados) { mutableStateOf(dados?.localNascimento ?: "") }
+    var filiacao        by remember(dados) { mutableStateOf(dados?.filiacao ?: "") }
 
     FormularioScaffold(
         titulo = "CNH detectada",
@@ -234,4 +273,12 @@ private fun FormularioScaffold(
 
 private fun String.blankToNull(): String? = ifBlank { null }
 
+@Preview(showBackground = true)
+@Composable
+private fun FormularioCnhScreenPreview()
+{
+    AppTema {
+        FormularioCnhScreen(1, null, {}, {})
+    }
+}
 

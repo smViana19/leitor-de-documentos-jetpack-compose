@@ -23,13 +23,13 @@ import com.example.leitordocumento_compose.presentation.ui.screen.PlacaScanScree
 import com.example.leitordocumento_compose.presentation.ui.screen.SettingScreen
 import com.example.leitordocumento_compose.utils.OcrResultadoHolder
 
-fun NavController.navegarParaFormulario(resultado: OcrResultado) {
+fun NavController.navegarParaFormulario(resultado: OcrResultado, id: Long) {
     OcrResultadoHolder.set(resultado)
     val rota = when (resultado) {
-        is OcrResultado.Cnh -> Screens.TELA_FORMULARIO_CNH.name
-        is OcrResultado.Rg -> Screens.TELA_FORMULARIO_RG.name
-        is OcrResultado.Placa -> Screens.TELA_FORMULARIO_PLACA.name
-        is OcrResultado.Desconhecido -> Screens.TELA_FORMULARIO_CNH.name
+        is OcrResultado.Cnh        -> "${Screens.TELA_FORMULARIO_CNH.route}/$id"
+        is OcrResultado.Rg         -> "${Screens.TELA_FORMULARIO_RG.route}/$id"
+        is OcrResultado.Placa      -> "${Screens.TELA_FORMULARIO_PLACA.route}/$id"
+        is OcrResultado.Desconhecido -> "${Screens.TELA_FORMULARIO_CNH.route}/$id"
     }
     navigate(rota)
 }
@@ -68,15 +68,15 @@ fun MainNavigation(inicioNavegacao: String) {
                 )
             }
         ) {
-            composable(route = Screens.TELA_HOME.name) {
+            composable(route = Screens.TELA_HOME.route) {
                 HomeScreen(navController = navController)
             }
-            composable(route = Screens.TELA_SCANNER.name) {
+            composable(route = Screens.TELA_SCANNER.route) {
                 DocumentScanScreen(navController = navController)
             }
 
             composable(
-                "${Screens.TELA_FORMULARIO_CNH.name}/{id}",
+                "${Screens.TELA_FORMULARIO_CNH.route}/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.LongType })
             ) { back ->
                 val id = back.arguments!!.getLong("id")
@@ -84,13 +84,13 @@ fun MainNavigation(inicioNavegacao: String) {
                 FormularioCnhScreen(
                     id = id,
                     dados = null,
-                    onConfirm = { navController.popBackStack(Screens.TELA_HOME.name, false) },
+                    onConfirm = { navController.popBackStack(Screens.TELA_HOME.route, false) },
                     onReler = { navController.popBackStack() }
                 )
             }
 
             composable(
-                "${Screens.TELA_FORMULARIO_RG.name}/{id}",
+                "${Screens.TELA_FORMULARIO_RG.route}/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.LongType })
             ) { back ->
                 val id = back.arguments!!.getLong("id")
@@ -99,13 +99,13 @@ fun MainNavigation(inicioNavegacao: String) {
                 FormularioRgScreen(
                     id = id,
                     dados = null,
-                    onConfirm = { navController.popBackStack(Screens.TELA_HOME.name, false) },
+                    onConfirm = { navController.popBackStack(Screens.TELA_HOME.route, false) },
                     onReler = { navController.popBackStack() }
                 )
             }
 
             composable(
-                "${Screens.TELA_FORMULARIO_PLACA.name}/{id}",
+                "${Screens.TELA_FORMULARIO_PLACA.route}/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.LongType })
             ) { back ->
                 val id = back.arguments!!.getLong("id")
@@ -117,20 +117,20 @@ fun MainNavigation(inicioNavegacao: String) {
             }
 
             composable(
-                "${Screens.TELA_FORMULARIO_CRLV.name}/{id}",
+                "${Screens.TELA_FORMULARIO_CRLV.route}/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.LongType })
             ) { back ->
                 val id = back.arguments!!.getLong("id")
                 FormularioCrlvScreen(
                     id = id,
                     dados = null,
-                    onConfirm = { navController.popBackStack(Screens.TELA_HOME.name, false) },
+                    onConfirm = { navController.popBackStack(Screens.TELA_HOME.route, false) },
                     onReler = { navController.popBackStack() }
                 )
             }
 
             composable(
-                route = "${Screens.TELA_SCANNER_PLACA.name}/{tipoVeiculo}",
+                route = "${Screens.TELA_SCANNER_PLACA.route}/{tipoVeiculo}",
                 arguments = listOf(navArgument("tipoVeiculo") { type = NavType.StringType })
             ) { backStackEntry ->
                 val tipoStr = backStackEntry.arguments?.getString("tipoVeiculo") ?: "CARRO"
@@ -142,10 +142,10 @@ fun MainNavigation(inicioNavegacao: String) {
                 )
             }
 
-            composable(route = Screens.TELA_CONFIGURACAO.name) {
+            composable(route = Screens.TELA_CONFIGURACAO.route) {
                 SettingScreen()
             }
-            composable(route = Screens.TELA_FORMULARIO.name) {
+            composable(route = Screens.TELA_FORMULARIO.route) {
                 FormScreen(navController = navController)
             }
 
