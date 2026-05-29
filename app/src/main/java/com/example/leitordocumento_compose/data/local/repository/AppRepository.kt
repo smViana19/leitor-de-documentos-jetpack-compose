@@ -10,22 +10,29 @@ import com.example.leitordocumento_compose.data.local.database.model.CnhEntity
 import com.example.leitordocumento_compose.data.local.database.model.CrlvEntity
 import com.example.leitordocumento_compose.data.local.database.model.PlacaEntity
 import com.example.leitordocumento_compose.data.local.database.model.RgEntity
+import com.example.leitordocumento_compose.data.local.repository.AppRepository.Salvo.*
 
 class AppRepository(
     private val cnhDao: CnhDao,
     private val rgDao: RgDao,
     private val placaDao: PlacaDao,
     private val crlvDao: CrlvDao
-) {
-    sealed class Salvo {
+)
+{
+    sealed class Salvo
+    {
         data class Cnh(val id: Long) : Salvo()
         data class Rg(val id: Long) : Salvo()
         data class Placa(val id: Long) : Salvo()
+        data class Crlv(val id: Long) : Salvo()
     }
 
-    suspend fun salvarResultadoOcr(resultado: OcrResultado): Salvo {
-        return when (resultado) {
-            is OcrResultado.Cnh -> {
+    suspend fun salvarResultadoOcr(resultado: OcrResultado): Salvo
+    {
+        return when (resultado)
+        {
+            is OcrResultado.Cnh ->
+            {
                 val d = resultado.dadosCNH
                 val id = cnhDao.salvarCnh(
                     CnhEntity(
@@ -42,20 +49,22 @@ class AppRepository(
                         rawText = d.rawText
                     )
                 )
-                Salvo.Cnh(id)
+                Cnh(id)
             }
 
-            is OcrResultado.Placa -> {
+            is OcrResultado.Placa ->
+            {
                 val id = placaDao.inserir(
                     PlacaEntity(
                         placa = resultado.dadosPlaca.placa,
                         placaNormalizada = resultado.dadosPlaca.placaNormalizada
                     )
                 )
-                Salvo.Placa(id)
+                Placa(id)
             }
 
-            is OcrResultado.Rg -> {
+            is OcrResultado.Rg ->
+            {
                 val id = rgDao.salvarRg(
                     RgEntity(
                         nome = resultado.dadosRG.nome,
@@ -69,12 +78,30 @@ class AppRepository(
                         rawText = resultado.dadosRG.rawText
                     )
                 )
-                Salvo.Rg(id)
+                Rg(id)
             }
 
-            is OcrResultado.Desconhecido -> {
+            is OcrResultado.Desconhecido ->
+            {
                 val id = cnhDao.salvarCnh(CnhEntity(rawText = resultado.rawText))
-                Salvo.Cnh(id)
+                Cnh(id)
+            }
+            is OcrResultado.Crlv ->
+            {
+                val id = crlvDao.inserir(CrlvEntity(placa = resultado.dadosCRLV.placa,
+                    renavam = resultado.dadosCRLV.renavam,
+                    chassi = resultado.dadosCRLV.chassi,
+                    proprietario = resultado.dadosCRLV.proprietario,
+                    marca = resultado.dadosCRLV.marca,
+                    modelo = resultado.dadosCRLV.modelo,
+                    anoFabricacao = resultado.dadosCRLV.anoFabricacao,
+                    anoModelo = resultado.dadosCRLV.anoModelo,
+                    cor = resultado.dadosCRLV.corPredominante,
+                    municipio = resultado.dadosCRLV.municipio,
+                    validade = resultado.dadosCRLV.validade,
+                    rawText = resultado.dadosCRLV.rawText
+                    ))
+                Crlv(id)
             }
         }
     }
@@ -84,17 +111,18 @@ class AppRepository(
     suspend fun buscarPlaca(id: Long) = placaDao.buscarPorId(id)
     suspend fun buscarCrlv(id: Long) = crlvDao.buscarPorId(id)
 
-    suspend fun atualizarCnh(entity: CnhEntity)     = cnhDao.editarCnh(entity)
-    suspend fun atualizarRg(entity: RgEntity)       = rgDao.editarRg(entity)
+    suspend fun atualizarCnh(entity: CnhEntity) = cnhDao.editarCnh(entity)
+    suspend fun atualizarRg(entity: RgEntity) = rgDao.editarRg(entity)
     suspend fun atualizarPlaca(entity: PlacaEntity) = placaDao.atualizar(entity)
-    suspend fun atualizarCrlv(entity: CrlvEntity)   = crlvDao.atualizar(entity)
+    suspend fun atualizarCrlv(entity: CrlvEntity) = crlvDao.atualizar(entity)
 
-    fun listarCnhs()   = cnhDao.buscarTodos()
-    fun listarRgs()    = rgDao.listarTodos()
+    fun listarCnhs() = cnhDao.buscarTodos()
+    fun listarRgs() = rgDao.listarTodos()
     fun listarPlacas() = placaDao.listarTodos()
-    fun listarCrlvs()  = crlvDao.listarTodos()
+    fun listarCrlvs() = crlvDao.listarTodos()
 
-    companion object {
+    companion object
+    {
         fun fromAppContainer() = AppRepository(
             AppContainer.db.cnhDao(),
             AppContainer.db.rgDao(),

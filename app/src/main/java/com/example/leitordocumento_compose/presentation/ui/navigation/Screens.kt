@@ -10,4 +10,5 @@ enum class Screens(val route : String) {
     TELA_FORMULARIO_CNH("tela_cnh"),
     TELA_FORMULARIO_RG("tela_rg"),
     TELA_FORMULARIO_PLACA("tela_placa"),
+    TELA_HISTORICO("tela_historico")
 }

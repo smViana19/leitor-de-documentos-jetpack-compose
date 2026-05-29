@@ -101,6 +101,8 @@ fun HomeScreen(navController: NavController)
             .verticalScroll(rememberScrollState())
             .systemBarsPadding()
     ) {
+        HomeCabecalho(navController = navController)
+
         Spacer(Modifier.height(32.dp))
         Titulo()
         Spacer(modifier = Modifier.height(40.dp))
@@ -148,37 +150,6 @@ fun HomeScreen(navController: NavController)
     }
 }
 
-@Composable
-private fun Cabecalho(modifier: Modifier = Modifier)
-{
-    Row(
-        modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically
-
-    ) {
-        IconButton(onClick = {}) {
-            Icon(
-                painter = painterResource(R.drawable.menu_icone),
-                contentDescription = "",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-        Spacer(modifier.width(16.dp))
-        Text(
-            text = "Scanner Digital",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.weight(1f)
-        )
-        IconButton(onClick = {}) {
-            Icon(
-                painter = painterResource(R.drawable.settings_menu),
-                contentDescription = "",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-
-    }
-}
 
 @Composable
 fun Titulo()
@@ -331,6 +302,29 @@ fun CardDocumento(
         }
     }
 }
+@Composable
+private fun HomeCabecalho(modifier: Modifier = Modifier, navController: NavController) {
+    Row(
+        modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically
+
+    ) {
+        Spacer(modifier.width(16.dp))
+        Text(
+            text = "Scanner Digital",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = {navController.navigate(Screens.TELA_HISTORICO.route)}) {
+            Icon(
+                painter = painterResource(R.drawable.ic_historico_24),
+                contentDescription = "",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+
+    }
+}
 
 
 @Composable
@@ -372,6 +366,8 @@ fun CardSelecao(modifier: Modifier = Modifier)
     }
 
 }
+
+
 
 @Composable
 fun HistoricoDigitalizacoes(lista: List<String>)

@@ -18,6 +18,7 @@ import com.example.leitordocumento_compose.presentation.ui.screen.FormularioCnhS
 import com.example.leitordocumento_compose.presentation.ui.screen.FormularioCrlvScreen
 import com.example.leitordocumento_compose.presentation.ui.screen.FormularioPlacaScreen
 import com.example.leitordocumento_compose.presentation.ui.screen.FormularioRgScreen
+import com.example.leitordocumento_compose.presentation.ui.screen.HistoricoScreen
 import com.example.leitordocumento_compose.presentation.ui.screen.HomeScreen
 import com.example.leitordocumento_compose.presentation.ui.screen.PlacaScanScreen
 import com.example.leitordocumento_compose.presentation.ui.screen.SettingScreen
@@ -29,6 +30,7 @@ fun NavController.navegarParaFormulario(resultado: OcrResultado, id: Long) {
         is OcrResultado.Cnh        -> "${Screens.TELA_FORMULARIO_CNH.route}/$id"
         is OcrResultado.Rg         -> "${Screens.TELA_FORMULARIO_RG.route}/$id"
         is OcrResultado.Placa      -> "${Screens.TELA_FORMULARIO_PLACA.route}/$id"
+        is OcrResultado.Crlv       -> "${Screens.TELA_FORMULARIO_CRLV.route}/$id"
         is OcrResultado.Desconhecido -> "${Screens.TELA_FORMULARIO_CNH.route}/$id"
     }
     navigate(rota)
@@ -148,7 +150,9 @@ fun MainNavigation(inicioNavegacao: String) {
             composable(route = Screens.TELA_FORMULARIO.route) {
                 FormScreen(navController = navController)
             }
-
+            composable(route = Screens.TELA_HISTORICO.route) {
+                HistoricoScreen(navController = navController)
+            }
 
         }
 

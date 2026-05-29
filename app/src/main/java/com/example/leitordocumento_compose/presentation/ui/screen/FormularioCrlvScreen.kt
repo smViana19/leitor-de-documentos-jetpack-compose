@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.leitordocumento_compose.R
+import com.example.leitordocumento_compose.data.DadosCNH
+import com.example.leitordocumento_compose.data.local.repository.AppRepository
 import com.example.leitordocumento_compose.presentation.ui.components.Campo
 import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
 
@@ -63,25 +66,49 @@ data class DadosCRLV(
 
 @Composable
 fun FormularioCrlvScreen(
-    id: Long? = null,
+    id: Long,
     dados: DadosCRLV?,
     onConfirm: (DadosCRLV) -> Unit,
     onReler: () -> Unit
 ) {
 
-    //TODO: REFATORAR DADOS PARA PEGAR DO ROOM E NAO DO OBJETO
+    val repository = remember { AppRepository.fromAppContainer() }
+    var dados by remember { mutableStateOf<DadosCRLV?>(null) }
 
-    var placa by remember { mutableStateOf(dados?.placa ?: "") }
-    var renavam by remember { mutableStateOf(dados?.renavam ?: "") }
-    var chassi by remember { mutableStateOf(dados?.chassi ?: "") }
-    var proprietario by remember { mutableStateOf(dados?.proprietario ?: "") }
-    var marca by remember { mutableStateOf(dados?.marca ?: "") }
-    var modelo by remember { mutableStateOf(dados?.modelo ?: "") }
-    var anoFab by remember { mutableStateOf(dados?.anoFabricacao ?: "") }
-    var anoMod by remember { mutableStateOf(dados?.anoModelo ?: "") }
-    var cor by remember { mutableStateOf(dados?.cor ?: "") }
-    var municipio by remember { mutableStateOf(dados?.municipio ?: "") }
-    var validade by remember { mutableStateOf(dados?.validade ?: "") }
+    LaunchedEffect(id) {
+        val entity = repository.buscarCrlv(id)
+        dados = entity?.let {
+            DadosCRLV(
+                placa = it.placa,
+                renavam = it.renavam,
+                chassi = it.chassi,
+                proprietario = it.proprietario,
+                marca = it.marca,
+                modelo = it.modelo,
+                anoFabricacao = it.anoFabricacao,
+                anoModelo = it.anoModelo,
+                cor = it.cor,
+                municipio = it.municipio,
+                categoria = it.categoria,
+                validade = it.validade,
+                rawText = it.rawText
+
+            )
+        }
+    }
+
+
+    var placa by remember(dados) { mutableStateOf(dados?.placa ?: "") }
+    var renavam by remember(dados) { mutableStateOf(dados?.renavam ?: "") }
+    var chassi by remember(dados) { mutableStateOf(dados?.chassi ?: "") }
+    var proprietario by remember(dados) { mutableStateOf(dados?.proprietario ?: "") }
+    var marca by remember(dados) { mutableStateOf(dados?.marca ?: "") }
+    var modelo by remember(dados) { mutableStateOf(dados?.modelo ?: "") }
+    var anoFab by remember(dados) { mutableStateOf(dados?.anoFabricacao ?: "") }
+    var anoMod by remember(dados) { mutableStateOf(dados?.anoModelo ?: "") }
+    var cor by remember(dados) { mutableStateOf(dados?.cor ?: "") }
+    var municipio by remember(dados) { mutableStateOf(dados?.municipio ?: "") }
+    var validade by remember(dados) { mutableStateOf(dados?.validade ?: "") }
 
     FormularioScaffold(
         titulo = "CRLV detectado",

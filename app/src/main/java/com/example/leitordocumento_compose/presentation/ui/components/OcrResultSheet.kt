@@ -105,7 +105,7 @@ fun OcrResultadoSheet(
                 is OcrResultado.Rg -> RgCampos(resultado.dadosRG)
                 is OcrResultado.Placa -> PlacaCampo(resultado.dadosPlaca)
                 is OcrResultado.Desconhecido -> RawTextCard(resultado.rawText)
-
+                is OcrResultado.Crlv -> TODO()
             }
             Spacer(modifier = Modifier.height(24.dp))
             Row(

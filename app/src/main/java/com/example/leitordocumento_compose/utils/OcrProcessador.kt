@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.example.documentscan.DocumentType
 import com.example.leitordocumento_compose.data.DadosCNH
+import com.example.leitordocumento_compose.data.DadosCRLV
 import com.example.leitordocumento_compose.data.DadosRG
 import com.example.leitordocumento_compose.data.OcrResultado
 import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
@@ -50,7 +51,8 @@ class OcrProcessador(
     private val processadorCustom: ((String) -> OcrResultado)? = null,
     private val onFrameTexto: ((String) -> Boolean)? = null
 
-) {
+)
+{
 
     private val SCORE_EARLY_EXIT = 14
 
@@ -71,7 +73,8 @@ class OcrProcessador(
     fun bindCamera(
         previewView: PreviewView,
         onFeedback: (FeedbackDocumento) -> Unit = {}
-    ) {
+    )
+    {
         val future = ProcessCameraProvider.getInstance(contexto)
         future.addListener({
             val provider = future.get()
@@ -93,13 +96,15 @@ class OcrProcessador(
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also { imageAnalysis ->
-                    if (onFrameTexto != null) {
+                    if (onFrameTexto != null)
+                    {
                         // Analisador leve de texto para placas
                         imageAnalysis.setAnalyzer(executor, AnalisadorTextoFrame(
                             reconhecedorTexto = reconhecedorTexto,
                             onTexto = { texto ->
                                 val deveCapturar = onFrameTexto.invoke(texto)
-                                if (deveCapturar && !capturasEmAndamento) {
+                                if (deveCapturar && !capturasEmAndamento)
+                                {
                                     capturarEProcessar()
                                 }
                                 // Feedback visual simples baseado no texto
@@ -113,14 +118,17 @@ class OcrProcessador(
                                 )
                             }
                         ))
-                    } else {
+                    }
+                    else
+                    {
                         imageAnalysis.setAnalyzer(executor, AnalisadorFrame(
                             tipoDocumento = tipoDocumentoSelecionado,
                             onFeedback = onFeedback
                         ))
                     }
                 }
-            try {
+            try
+            {
                 provider.unbindAll()
                 camera = provider.bindToLifecycle(
                     lifecycleOwner,
@@ -129,7 +137,9 @@ class OcrProcessador(
                     imagemCaptura,
                     analiseImagem
                 )
-            } catch (e: Exception) {
+            }
+            catch (e: Exception)
+            {
                 onError("Erro ao iniciar câmera: ${e.message}")
             }
         }, ContextCompat.getMainExecutor(contexto))
@@ -137,17 +147,20 @@ class OcrProcessador(
 
     }
 
-    fun ligarFlash(estadoAtual: Boolean): Boolean {
+    fun ligarFlash(estadoAtual: Boolean): Boolean
+    {
         val novoEstado = !estadoAtual
         val hasFlash = camera?.cameraInfo?.hasFlashUnit() ?: false
 
-        if (hasFlash) {
+        if (hasFlash)
+        {
             camera?.cameraControl?.enableTorch(novoEstado)
         }
         return if (hasFlash) novoEstado else false
     }
 
-    fun capturarEProcessar() {
+    fun capturarEProcessar()
+    {
 
         if (capturasEmAndamento) return
         capturasEmAndamento = true
@@ -163,8 +176,10 @@ class OcrProcessador(
         captura: ImageCapture,
         restantes: Int,
         bitmapsAcumulados: List<Bitmap>
-    ) {
-        if (restantes == 0) {
+    )
+    {
+        if (restantes == 0)
+        {
             processarMultiplosBitmaps(bitmapsAcumulados)
             return
         }
@@ -173,42 +188,60 @@ class OcrProcessador(
         val feitos = total - restantes
         onProgresso?.invoke(feitos.toFloat() / total)
 
-        captura.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
-            override fun onCaptureSuccess(proxy: ImageProxy) {
-                try {
+        captura.takePicture(executor, object : ImageCapture.OnImageCapturedCallback()
+        {
+            override fun onCaptureSuccess(proxy: ImageProxy)
+            {
+                try
+                {
                     val bitmap =
                         proxy.toBitmap().rotateTo(proxy.imageInfo.rotationDegrees.toFloat())
                     proxy.close()
                     val novos = bitmapsAcumulados + bitmap
 
-                    if (novos.size >= 1 && restantes > 1) {
+                    if (novos.size >= 1 && restantes > 1)
+                    {
                         processarFrameRapido(novos.last()) { score ->
-                            if (score >= SCORE_EARLY_EXIT) {
+                            if (score >= SCORE_EARLY_EXIT)
+                            {
                                 // Score alto o suficiente — processa o que já temos
                                 processarMultiplosBitmaps(novos)
-                            } else {
+                            }
+                            else
+                            {
                                 Thread.sleep(DELAY_ENTRE_CAPTURAS_MS)
                                 capturarMultiplos(captura, restantes - 1, novos)
                             }
                         }
-                    } else {
+                    }
+                    else
+                    {
                         capturarMultiplos(captura, 0, novos)
                     }
-                } catch (e: Exception) {
+                }
+                catch (e: Exception)
+                {
                     proxy.close()
-                    if (bitmapsAcumulados.isNotEmpty()) {
+                    if (bitmapsAcumulados.isNotEmpty())
+                    {
                         processarMultiplosBitmaps(bitmapsAcumulados)
-                    } else {
+                    }
+                    else
+                    {
                         capturasEmAndamento = false
                         onError("Erro ao capturar: ${e.message}")
                     }
                 }
             }
 
-            override fun onError(exception: ImageCaptureException) {
-                if (bitmapsAcumulados.isNotEmpty()) {
+            override fun onError(exception: ImageCaptureException)
+            {
+                if (bitmapsAcumulados.isNotEmpty())
+                {
                     processarMultiplosBitmaps(bitmapsAcumulados)
-                } else {
+                }
+                else
+                {
                     capturasEmAndamento = false
                     onError("Erro ao capturar imagem: ${exception.message}")
                 }
@@ -216,7 +249,8 @@ class OcrProcessador(
         })
     }
 
-    private fun processarFrameRapido(bitmap: Bitmap, onScore: (Int) -> Unit) {
+    private fun processarFrameRapido(bitmap: Bitmap, onScore: (Int) -> Unit)
+    {
         val image = InputImage.fromBitmap(bitmap, 0)
         reconhecedorTexto.process(image)
             .addOnSuccessListener { mlText ->
@@ -230,7 +264,8 @@ class OcrProcessador(
             .addOnFailureListener { onScore(0) }
     }
 
-    private fun processarMultiplosBitmaps(bitmaps: List<Bitmap>) {
+    private fun processarMultiplosBitmaps(bitmaps: List<Bitmap>)
+    {
 
         val resultados = mutableListOf<OcrResultado>()
         var processados = 0
@@ -241,12 +276,14 @@ class OcrProcessador(
                 .addOnSuccessListener { mlText ->
                     Log.d("OCR_RAW", "Frame $index:\n${mlText.text}")
                     val resultado = processadorCustom?.invoke(mlText.text)
-                        ?: DocumentoOcrProcessador.processarDocumento(mlText, tipoDocumentoSelecionado())
+                        ?: DocumentoOcrProcessador.processarDocumento(mlText,
+                            tipoDocumentoSelecionado())
 
                     synchronized(resultados) {
                         resultados.add(resultado)
                         processados++
-                        if (processados == bitmaps.size) {
+                        if (processados == bitmaps.size)
+                        {
                             capturasEmAndamento = false
                             val melhor = selecionarMelhorResultado(resultados)
                             onResultado(melhor)
@@ -256,11 +293,15 @@ class OcrProcessador(
                 .addOnFailureListener { e ->
                     synchronized(resultados) {
                         processados++
-                        if (processados == bitmaps.size) {
+                        if (processados == bitmaps.size)
+                        {
                             capturasEmAndamento = false
-                            if (resultados.isNotEmpty()) {
+                            if (resultados.isNotEmpty())
+                            {
                                 onResultado(selecionarMelhorResultado(resultados))
-                            } else {
+                            }
+                            else
+                            {
                                 onError("OCR falhou em todos os frames: ${e.message}")
                             }
                         }
@@ -269,24 +310,29 @@ class OcrProcessador(
         }
     }
 
-    private fun selecionarMelhorResultado(resultados: List<OcrResultado>): OcrResultado {
+    private fun selecionarMelhorResultado(resultados: List<OcrResultado>): OcrResultado
+    {
         if (resultados.isEmpty()) return OcrResultado.Desconhecido("")
         if (resultados.size == 1) return resultados[0]
 
         val cnhs = resultados.filterIsInstance<OcrResultado.Cnh>()
         val rgs = resultados.filterIsInstance<OcrResultado.Rg>()
+        val crlvs = resultados.filterIsInstance<OcrResultado.Crlv>() // <- Novo
         val placas = resultados.filterIsInstance<OcrResultado.Placa>()
 
-        return when {
+        return when
+        {
             cnhs.size >= resultados.size / 2 -> mergeCnh(cnhs)
             rgs.size >= resultados.size / 2 -> mergeRg(rgs)
+            crlvs.size >= resultados.size / 2 -> mergeCrlv(crlvs) // <- Novo
             placas.size >= resultados.size / 2 -> mergePlaca(placas) // ← novo
             else -> resultados.maxByOrNull { pontuarResultado(it) } ?: resultados[0]
             //      ↑ antes estava um bloco vazio {} que retornava Unit
         }
     }
 
-    private fun mergePlaca(placas: List<OcrResultado.Placa>): OcrResultado.Placa {
+    private fun mergePlaca(placas: List<OcrResultado.Placa>): OcrResultado.Placa
+    {
         // Retorna a placa que apareceu com mais frequência entre os frames
         return placas
             .groupBy { it.dadosPlaca }
@@ -297,13 +343,14 @@ class OcrProcessador(
     }
 
 
-
-    private fun mergeCnh(cnhs: List<OcrResultado.Cnh>): OcrResultado.Cnh {
+    private fun mergeCnh(cnhs: List<OcrResultado.Cnh>): OcrResultado.Cnh
+    {
         // Ordena por pontuação descendente — o melhor é a base
         val ordenados = cnhs.sortedByDescending { pontuarCnh(it.dadosCNH) }
         var base = ordenados[0].dadosCNH
 
-        for (i in 1 until ordenados.size) {
+        for (i in 1 until ordenados.size)
+        {
             val outro = ordenados[i].dadosCNH
             base = base.copy(
                 nome = base.nome ?: outro.nome,
@@ -326,11 +373,13 @@ class OcrProcessador(
         return OcrResultado.Cnh(base)
     }
 
-    private fun mergeRg(rgs: List<OcrResultado.Rg>): OcrResultado.Rg {
+    private fun mergeRg(rgs: List<OcrResultado.Rg>): OcrResultado.Rg
+    {
         val ordenados = rgs.sortedByDescending { pontuarRg(it.dadosRG) }
         var base = ordenados[0].dadosRG
 
-        for (i in 1 until ordenados.size) {
+        for (i in 1 until ordenados.size)
+        {
             val outro = ordenados[i].dadosRG
             base = base.copy(
                 nome = base.nome ?: outro.nome,
@@ -347,15 +396,77 @@ class OcrProcessador(
         return OcrResultado.Rg(base)
     }
 
-    private fun pontuarResultado(r: OcrResultado): Int = when (r) {
+    private fun mergeCrlv(crlvs: List<OcrResultado.Crlv>): OcrResultado.Crlv {
+        val ordenados = crlvs.sortedByDescending { pontuarCrlv(it.dadosCRLV) }
+        var base = ordenados[0].dadosCRLV
+
+        for (i in 1 until ordenados.size) {
+            val outro = ordenados[i].dadosCRLV
+            base = base.copy(
+                placa = base.placa ?: outro.placa,
+                renavam = base.renavam ?: outro.renavam,
+                chassi = base.chassi ?: outro.chassi,
+                proprietario = base.proprietario ?: outro.proprietario,
+                cpfCnpjProprietario = base.cpfCnpjProprietario ?: outro.cpfCnpjProprietario,
+                marca = base.marca ?: outro.marca,
+                modelo = base.modelo ?: outro.modelo,
+                anoFabricacao = base.anoFabricacao ?: outro.anoFabricacao,
+                anoModelo = base.anoModelo ?: outro.anoModelo,
+                corPredominante = base.corPredominante ?: outro.corPredominante,
+                combustivel = base.combustivel ?: outro.combustivel,
+                especie = base.especie ?: outro.especie,
+                tipo = base.tipo ?: outro.tipo,
+                categoria = base.categoria ?: outro.categoria,
+                municipio = base.municipio ?: outro.municipio,
+                uf = base.uf ?: outro.uf,
+                validade = base.validade ?: outro.validade,
+                exercicio = base.exercicio ?: outro.exercicio,
+                potencia = base.potencia ?: outro.potencia,
+                cilindrada = base.cilindrada ?: outro.cilindrada,
+                pbt = base.pbt ?: outro.pbt,
+                cmt = base.cmt ?: outro.cmt,
+                capacidade = base.capacidade ?: outro.capacidade,
+                rawText = (base.rawText + "\n---\n" + outro.rawText).trim()
+            )
+        }
+        return OcrResultado.Crlv(base)
+    }
+
+
+    private fun pontuarResultado(r: OcrResultado): Int = when (r)
+    {
         is OcrResultado.Cnh -> pontuarCnh(r.dadosCNH)
         is OcrResultado.Rg -> pontuarRg(r.dadosRG)
         is OcrResultado.Placa -> 1  // placa válida vale alguma coisa
         is OcrResultado.Desconhecido -> 0
-
+        is OcrResultado.Crlv -> pontuarCrlv(r.dadosCRLV)
     }
 
-    private fun pontuarCnh(dadosCNH: DadosCNH): Int {
+    private fun pontuarCrlv(dados: DadosCRLV): Int
+    {
+        var score = 0
+        // Campos críticos valem mais
+        if (!dados.placa.isNullOrBlank()) score += 3
+        if (!dados.renavam.isNullOrBlank()) score += 3
+        if (!dados.chassi.isNullOrBlank()) score += 3
+
+        // Dados do proprietário
+        if (!dados.proprietario.isNullOrBlank()) score += 2
+        if (!dados.cpfCnpjProprietario.isNullOrBlank()) score += 2
+
+        // Dados do veículo e emissão
+        if (!dados.marca.isNullOrBlank()) score += 1
+        if (!dados.modelo.isNullOrBlank()) score += 1
+        if (!dados.exercicio.isNullOrBlank()) score += 1
+        if (!dados.anoFabricacao.isNullOrBlank()) score += 1
+        if (!dados.municipio.isNullOrBlank()) score += 1
+
+        return score
+    }
+
+
+    private fun pontuarCnh(dadosCNH: DadosCNH): Int
+    {
         var score = 0
         if (!dadosCNH.nome.isNullOrBlank()) score += 3
         if (!dadosCNH.cpf.isNullOrBlank()) score += 3
@@ -371,7 +482,8 @@ class OcrProcessador(
         return score
     }
 
-    private fun pontuarRg(dadosRG: DadosRG): Int {
+    private fun pontuarRg(dadosRG: DadosRG): Int
+    {
         var score = 0
         if (!dadosRG.nome.isNullOrBlank()) score += 3
         if (!dadosRG.rg.isNullOrBlank()) score += 3
@@ -385,20 +497,23 @@ class OcrProcessador(
 
     fun processarBitmapExterno(bitmap: Bitmap) = processarMultiplosBitmaps(listOf(bitmap))
 
-    fun shutdown() {
+    fun shutdown()
+    {
         executor.shutdown()
         reconhecedorTexto.close()
     }
 
 
-    private fun ImageProxy.toBitmap(): Bitmap {
+    private fun ImageProxy.toBitmap(): Bitmap
+    {
         val buffer = planes[0].buffer
         val bytes = ByteArray(buffer.remaining())
         buffer.get(bytes)
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
     }
 
-    private fun Bitmap.rotateTo(degrees: Float): Bitmap {
+    private fun Bitmap.rotateTo(degrees: Float): Bitmap
+    {
         if (degrees == 0f) return this
         val matrix = Matrix().apply { postRotate(degrees) }
         return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)

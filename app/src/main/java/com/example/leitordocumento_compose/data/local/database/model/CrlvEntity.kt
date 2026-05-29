@@ -16,6 +16,7 @@ data class CrlvEntity(
     val anoModelo: String? = null,
     val cor: String? = null,
     val municipio: String? = null,
+    val categoria: String? = null,
     val validade: String? = null,
     val rawText: String = "",
     val criadoEm: Long = System.currentTimeMillis()

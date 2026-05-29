@@ -16,15 +16,17 @@ import com.example.leitordocumento_compose.data.local.database.model.RgEntity
 
 @Database(
     entities = [CnhEntity::class, RgEntity::class, PlacaEntity::class, CrlvEntity::class],
-    version = 1
+    version = 2
 )
-abstract class AppDatabase : RoomDatabase() {
+abstract class AppDatabase : RoomDatabase()
+{
     abstract fun cnhDao(): CnhDao
     abstract fun rgDao(): RgDao
     abstract fun placaDao(): PlacaDao
     abstract fun crlvDao(): CrlvDao
 
-    companion object {
+    companion object
+    {
         private var INSTANCE: AppDatabase? = null
 
         fun getInstance(context: Context): AppDatabase =
@@ -33,15 +35,19 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "scanner_db"
-                ).build().also { INSTANCE = it }
+                ).fallbackToDestructiveMigration()
+                    .build().also { INSTANCE = it }
             }
     }
 }
-object AppContainer {
+
+object AppContainer
+{
     lateinit var db: AppDatabase
         private set
 
-    fun init(context: Context) {
+    fun init(context: Context)
+    {
         db = AppDatabase.getInstance(context)
     }
 }

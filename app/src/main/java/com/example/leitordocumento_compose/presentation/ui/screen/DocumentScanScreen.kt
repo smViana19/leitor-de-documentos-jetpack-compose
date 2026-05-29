@@ -138,6 +138,7 @@ fun DocumentScanScreen(
                         is AppRepository.Salvo.Cnh -> salvo.id
                         is AppRepository.Salvo.Placa -> salvo.id
                         is AppRepository.Salvo.Rg -> salvo.id
+                        is AppRepository.Salvo.Crlv -> salvo.id
                     }
                     navController.navegarParaFormulario(resultado, id)
                 }
@@ -156,9 +157,9 @@ fun DocumentScanScreen(
         }
     }
     LaunchedEffect(framesPerfeitos) {
-        if (framesPerfeitos >= 4 && !isProcessando) {
+        if (framesPerfeitos >= 1 && !isProcessando) {
             delay(500)   // 500ms adicionais de segurança
-            if (framesPerfeitos >= 4 && !isProcessando) {
+            if (framesPerfeitos >= 2 && !isProcessando) {
                 isProcessando = true
                 framesPerfeitos = 0
                 ocrProcessador.capturarEProcessar()
