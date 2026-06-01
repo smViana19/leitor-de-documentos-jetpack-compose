@@ -7,254 +7,155 @@ import com.example.leitordocumento_compose.data.DadosRG
 import com.example.leitordocumento_compose.data.OcrResultado
 import com.google.mlkit.vision.text.Text
 
+/**
+ * DocumentoOcrProcessador — abordagem "padrão primeiro, rótulo depois".
+ *
+ * Filosofia central:
+ *  - Campos com formato fixo (placa, chassi, CPF, RENAVAM) são extraídos
+ *    por regex direta no texto completo — independente de layout.
+ *  - Campos contextuais (nome, município, marca) usam janela de contexto
+ *    ao redor de palavras-âncora conhecidas.
+ *  - Sem parse linha-por-linha: o CRLV digital mistura rótulos e valores
+ *    na mesma linha, tornando essa abordagem não-confiável.
+ */
+object DocumentoOcrProcessador {
 
-object DocumentoOcrProcessador
-{
+    // ─────────────────────────────────────────────────────────────────────────
+    // Regex compartilhadas
+    // ─────────────────────────────────────────────────────────────────────────
 
-    // ── Regex compartilhadas ──────────────────────────────────────────────────
+    // Data DD/MM/AAAA com qualquer separador
+    private val RX_DATA = Regex("""(\d{2}[/.\-]\d{2}[/.\-]\d{4})""")
 
-    /** Data DD/MM/AAAA com separadores flexíveis */
-    private val regexData = Regex("""(\d{2}[/.\-]\d{2}[/.\-]\d{4})""")
+    // CPF formatado: 000.000.000-00 (com separadores flexíveis)
+    private val RX_CPF = Regex("""(\d{3}[.\- ]\d{3}[.\- ]\d{3}[.\- ]\d{2})""")
 
-    /**
-     * CPF — aceita formatado (000.000.000-00) e compacto (00000000000).
-     * Exige 11 dígitos com separadores opcionais.
-     */
-    private val regexCpf = Regex("""(?<!\d)(\d{3}[.\- ]?\d{3}[.\- ]?\d{3}[.\- ]?\d{2})(?!\d)""")
+    // CPF compacto: 11 dígitos isolados
+    private val RX_CPF_COMPACTO = Regex("""(?<!\d)(\d{11})(?!\d)""")
 
-    /** Nº registro CNH — 9 a 11 dígitos isolados */
-    private val regexRegistroCnh = Regex("""(?<!\d)(\d{9,11})(?!\d)""")
+    // Placa Mercosul (ABC1D23) e antiga (ABC1234)
+    private val RX_PLACA = Regex("""(?<![A-Z0-9])([A-Z]{3}\d[A-Z0-9]\d{2})(?![A-Z0-9])""",
+        RegexOption.IGNORE_CASE)
 
-    /**
-     * RG — formatos comuns:
-     *   XX.XXX.XXX-X  |  XX.XXX.XXX-X  |  XXXXXXXXX  (7-9 chars)
-     */
-    private val regexRg = Regex("""M?[\d][.\d\-X]{4,19}""", RegexOption.IGNORE_CASE)
+    // VIN / Chassi: exatamente 17 chars alfanuméricos sem I, O, Q
+    private val RX_CHASSI = Regex("""(?<![A-Z0-9])([A-HJ-NPR-Z0-9]{17})(?![A-Z0-9])""",
+        RegexOption.IGNORE_CASE)
 
-    /** Categoria de CNH — letras isoladas válidas */
-    private val regexCategoriaExata = Regex(
-        """(?<![A-Z0-9])([ABCDE]{1,2}(?:CC)?)(?![A-Z0-9])""",
-        RegexOption.IGNORE_CASE
+    // RENAVAM após palavra-âncora
+    private val RX_RENAVAM_ANCORA = Regex(
+        """(?:RENAVAM|RENAVAN)\s+(\d{9,11})""", RegexOption.IGNORE_CASE)
+
+    // Ano isolado 1950-2099
+    private val RX_ANO = Regex("""(?<!\d)((?:19[5-9]\d|20\d{2}))(?!\d)""")
+
+    // Validade MM/AAAA
+    private val RX_VALIDADE_CRLV = Regex("""(\d{2}/\d{4})""")
+
+    // Potência e cilindrada: 85CV/997
+    private val RX_POTENCIA = Regex("""(\d+)\s*CV[/\s](\d+)""", RegexOption.IGNORE_CASE)
+
+    // Número do CRV (para excluir da busca de RENAVAM)
+    private val RX_CRV = Regex("""(?:NUMERO\s+DO\s+CRV|N.MERO\s+DO\s+CRV)\s+(\d+)""",
+        RegexOption.IGNORE_CASE)
+
+    private val CORES = setOf(
+        "AMARELA","AZUL","BEGE","BRANCA","CINZA","DOURADA","GRENA","LARANJA",
+        "MARROM","PRATA","PRETA","ROSA","ROXA","VERDE","VERMELHA","FANTASIA"
     )
 
-    /** Valida se uma string limpa é uma categoria real */
-    private val categoriasValidas = setOf(
-        "A", "B", "C", "D", "E",
-        "AB", "AC", "AD", "AE"
+    private val MARCAS = listOf(
+        "FORD","VOLKSWAGEN","VW","FIAT","CHEVROLET","GM","TOYOTA","HONDA",
+        "HYUNDAI","RENAULT","NISSAN","BMW","MERCEDES","JEEP","DODGE",
+        "MITSUBISHI","CHERY","JAC","CAOA","YAMAHA","KAWASAKI","SUZUKI",
+        "VOLVO","SCANIA","IVECO","PEUGEOT","CITROEN","LAND ROVER","MINI"
     )
 
-    /** Rótulos de campo impressos nas CNHs brasileiras (novos e antigos modelos) */
-    private val rotulosCategoria = listOf(
-        "CAT. HAB", "CAT HAB", "CAT.HAB",
-        "CAT. HABILITAÇÃO", "CAT HABILITAÇÃO",
-        "CATEGORIA", "CAT.",
-        "9"
+    // Categorias válidas de CNH
+    private val CATEGORIAS_CNH = setOf("A","B","C","D","E","AB","AC","AD","AE")
+
+    // Categorias válidas de veículo no CRLV
+    private val CATEGORIAS_VEICULO = setOf(
+        "PARTICULAR","ALUGUEL","OFICIAL","APRENDIZAGEM","COLEÇÃO",
+        "DIPLOMATICO","EXPERIENCIA","FABRICANTE"
     )
 
-    private val CORES_OFICIAIS = setOf(
-        "AMARELA", "AZUL", "BEGE", "BRANCA", "CINZA", "DOURADA", "GRENA", "LARANJA",
-        "MARROM", "PRATA", "PRETA", "ROSA", "ROXA", "VERDE", "VERMELHA", "FANTASIA"
-    )
+    // ─────────────────────────────────────────────────────────────────────────
+    // Ponto de entrada
+    // ─────────────────────────────────────────────────────────────────────────
 
-    private val CATEGORIAS_OFICIAIS = setOf(
-        "PARTICULAR", "ALUGUEL", "OFICIAL", "APRENDIZAGEM",
-        "COLECÃO", "COLECAO", "DIPLOMATICO", "EXPERIENCIA", "FABRICANTE"
-    )
-
-    private val regexApenasLetrasECat = Regex("[^A-ZÁÉÍÓÚÂÊÔÇ ]") // Limpa sujeiras do OCR
-
-    private val regexApenasLetras = Regex("[^A-ZÁÉÍÓÚÂÊÔÇ ]") // Remove tudo que não for letra ou espaço
-
-    // ── Regex específicas para CRLV ───────────────────────────────────────────
-
-    /**
-     * Placa Mercosul: ABC1D23
-     * Placa antiga: ABC-1234 ou ABC1234
-     */
-    private val regexPlaca = Regex(
-        """(?<![A-Z0-9])([A-Z]{3}[- ]?\d[A-Z0-9]\d{2})(?![A-Z0-9])""",
-        RegexOption.IGNORE_CASE
-    )
-
-    /**
-     * RENAVAM: 9 ou 11 dígitos.
-     * Evita confusão com chassi (17 chars) e outros números.
-     */
-    private val regexRenavam = Regex("""(?<!\d)(\d{9}|\d{11})(?!\d)""")
-
-    /**
-     * VIN / Chassi: 17 caracteres alfanuméricos (excluindo I, O, Q para evitar ambiguidade).
-     */
-    private val regexChassi = Regex(
-        """(?<![A-Z0-9])([A-HJ-NPR-Z0-9]{17})(?![A-Z0-9])""",
-        RegexOption.IGNORE_CASE
-    )
-
-    /** Ano isolado de 4 dígitos (1950–2099) */
-    private val regexAno = Regex("""(?<!\d)((?:19[5-9]\d|20\d{2}))(?!\d)""")
-
-    /** Validade de licenciamento: MM/AAAA */
-    private val regexValidadeCrlv = Regex("""(\d{2}[/]\d{4})""")
-
-    // ── Ponto de entrada ──────────────────────────────────────────────────────
-
-    fun processarDocumento(mlKitTexto: Text, tipoDocumentoSelecionado: DocumentType): OcrResultado
-    {
-        val textoCompleto = mlKitTexto.text
-        val linhas = textoCompleto
-            .lines()
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-
-        return when
-        {
-            isCrlv(textoCompleto) -> OcrResultado.Crlv(processarCrlv(linhas, textoCompleto))
-            isCnh(textoCompleto) -> OcrResultado.Cnh(processarCnh(linhas,
-                textoCompleto,
-                mlKitTexto))
-            isRg(textoCompleto) -> OcrResultado.Rg(processarRg(linhas, textoCompleto))
-            else -> OcrResultado.Desconhecido(rawText = textoCompleto)
+    fun processarDocumento(mlKitTexto: Text, tipoDocumentoSelecionado: DocumentType): OcrResultado {
+        val raw = mlKitTexto.text
+        val up = raw.uppercase()
+        return when {
+            isCrlv(up) -> OcrResultado.Crlv(processarCrlv(raw, up))
+            isCnh(up)  -> OcrResultado.Cnh(processarCnh(raw, up, mlKitTexto))
+            isRg(up)   -> OcrResultado.Rg(processarRg(raw, up))
+            else       -> OcrResultado.Desconhecido(rawText = raw)
         }
     }
 
-    // ── Detecção de tipo ──────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Detecção de tipo
+    // ─────────────────────────────────────────────────────────────────────────
 
-    private fun isCrlv(texto: String): Boolean
-    {
-        val up = texto.uppercase()
+    private fun isCrlv(up: String): Boolean {
         var score = 0
-
-        // Termos exclusivos do CRLV
-        if (up.contains("CRLV")) score += 5
-        if (up.contains("LICENCIAMENTO")) score += 3
-        if (up.contains("RENAVAM")) score += 4
-        if (up.contains("CHASSI")) score += 3
-        if (up.contains("REGISTRO E LICENCIAMENTO")) score += 5
-        if (up.contains("CERTIFICADO DE REGISTRO")) score += 5
-
-        // Termos de apoio
-        if (up.contains("RENAVAM")) score += 2
-        if (up.contains("MARCA/MODELO") || up.contains("MARCA / MODELO")) score += 2
-        if (up.contains("ESPÉCIE") || up.contains("ESPECIE")) score += 2
-        if (up.contains("COMBUSTÍVEL") || up.contains("COMBUSTIVEL")) score += 2
-        if (up.contains("DENATRAN") || up.contains("SENATRAN")) score += 1
-        if (up.contains("EXERCÍCIO") || up.contains("EXERCICIO")) score += 2
-
-        // Termos que indicam que NÃO é CRLV
-        if (up.contains("HABILITAÇÃO")) score -= 5   // CNH
-        if (up.contains("IDENTIDADE")) score -= 5   // RG
-
-        return score >= 4
+        if (up.contains("RENAVAM"))                            score += 5
+        if (up.contains("LICENCIAMENTO"))                      score += 4
+        if (up.contains("CERTIFICADO DE REGISTRO"))            score += 5
+        if (up.contains("CRLV"))                               score += 5
+        if (up.contains("CHASSI") || up.contains("CHASS"))    score += 3
+        if (up.contains("MARCA") && up.contains("MODELO"))     score += 2
+        if (up.contains("EXERC"))                              score += 2
+        if (up.contains("HABILITAÇÃO"))                        score -= 8
+        if (up.contains("IDENTIDADE"))                         score -= 8
+        return score >= 5
     }
 
-    private fun isCnh(texto: String): Boolean
-    {
-        val up = texto.uppercase()
-        return up.contains("HABILITAÇÃO") ||
+    private fun isCnh(up: String): Boolean =
+        up.contains("HABILITAÇÃO") ||
                 up.contains("CARTEIRA NACIONAL") ||
                 up.contains("DRIVER LICENSE") ||
-                up.contains("PERMISO DE CONDUCCIÓN") ||
                 up.contains("DETRAN") ||
-                up.contains("MINISTÉRIO DA INFRAESTRUTURA") ||
-                up.contains("SECRETARIA NACIONAL DE TRÂNSITO") ||
                 up.contains("SENATRAN") ||
-                up.contains("DENATRAN")
-    }
+                up.contains("DENATRAN") ||
+                up.contains("MINISTÉRIO DA INFRAESTRUTURA") ||
+                up.contains("SECRETARIA NACIONAL DE TRÂNSITO")
 
-    private fun isRg(texto: String): Boolean
-    {
-        val up = texto.uppercase()
-        return up.contains("IDENTIDADE") ||
+    private fun isRg(up: String): Boolean =
+        up.contains("IDENTIDADE") ||
                 up.contains("REGISTRO GERAL") ||
                 up.contains("REPÚBLICA FEDERATIVA") ||
                 (up.contains("SECRETARIA") && up.contains("SEGURANÇA"))
-    }
 
-    // ── Processamento CRLV ────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // CRLV
+    // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Extrai campos do CRLV usando rótulos impressos no documento.
-     *
-     * Layout típico (modelos 2010–2024):
-     *  - RENAVAM
-     *  - PLACA / MUNICÍPIO-UF
-     *  - MARCA/MODELO/VERSÃO
-     *  - ANO FAB. / ANO MOD.
-     *  - CHASSI
-     *  - COR PREDOMINANTE / COMBUSTÍVEL
-     *  - ESPÉCIE/TIPO / CATEGORIA
-     *  - PROPRIETÁRIO
-     *  - CPF/CNPJ
-     *  - EXERCÍCIO / VALIDADE
+     * Extrai todos os campos do CRLV por regex direta no texto completo.
+     * Funciona tanto para o CRLV digital (layout caótico) quanto para o físico.
      */
-    private fun processarCrlv(linhas: List<String>, rawText: String): DadosCRLV
-    {
+    private fun processarCrlv(raw: String, up: String): DadosCRLV {
 
-        val placa = extrairPlaca(linhas, rawText)
+        // Texto normalizado para campos numéricos (O→0, I→1 etc.) sem quebrar nomes
+        val norm = normalizarNumerico(up)
 
-        val renavam = extractValueAfterKeyword(linhas, listOf("RENAVAM"))
-            ?.let { regexRenavam.find(it.replace(".", "").replace("-", ""))?.value }
-            ?: regexRenavam.findAll(rawText)
-                .map { it.value }
-                .firstOrNull { it.length in setOf(9, 11) && it != placa?.replace("-", "") }
-
-        val chassi = extrairChassi(linhas, rawText)
-
-        val proprietario = extractLineAfterKeyword(
-            linhas, listOf("PROPRIETÁRIO", "PROPRIETARIO", "NOME DO PROPRIETÁRIO", "NOME")
-        )?.takeIf { it.none { c -> c.isDigit() } || it.length > 8 }
-
-        val cpfCnpj = extrairCpfOuCnpj(linhas, rawText)
-
-        val (marca, modelo) = extrairMarcaModelo(linhas, rawText)
-
-        val (anoFab, anoMod) = extrairAnos(linhas, rawText)
-
-        val cor = extrairCor(linhas)
-
-        val combustivel = extractValueAfterKeyword(
-            linhas, listOf("COMBUSTÍVEL", "COMBUSTIVEL", "COMB.")
-        )?.trim()?.uppercase()
-
-        val especie = extractValueAfterKeyword(
-            linhas, listOf("ESPÉCIE", "ESPECIE", "ESPÉCIE/TIPO")
-        )?.trim()?.uppercase()
-
-        val tipo = extractValueAfterKeyword(
-            linhas, listOf("TIPO", "CARROCERIA")
-        )?.trim()?.uppercase()
-
-
-        // No CRLV é "PARTICULAR", "ALUGUEL", etc. diferente da CNH
-        val categoriaVeiculo = extractValueAfterKeyword(
-            linhas, listOf("CATEGORIA", "CAT.")
-        )?.trim()?.uppercase()
-            ?.takeIf { it.length in 3..20 }
-
-        val (municipio, uf) = extrairMunicipioUf(linhas, rawText, placa)
-
-
-        val exercicio = extractValueAfterKeyword(
-            linhas, listOf("EXERCÍCIO", "EXERCICIO", "ANO EXERC", "EXERC.")
-        )?.let { regexAno.find(it)?.value }
-
-        val validade = extractValueAfterKeyword(
-            linhas, listOf("VALIDADE", "VÁLIDO ATÉ", "VENCIMENTO")
-        )?.let {
-            regexValidadeCrlv.find(it)?.value ?: regexData.find(it)?.value
-        } ?: regexValidadeCrlv.find(rawText)?.value
-
-        // ── Dados técnicos opcionais ──────────────────────────────────────────
-        val potencia = extractValueAfterKeyword(linhas, listOf("POTÊNCIA", "POTENCIA", "CV"))
-            ?.let { Regex("""\d+""").find(it)?.value }
-        val cilindrada = extractValueAfterKeyword(linhas, listOf("CILINDRADA", "CC"))
-            ?.let { Regex("""\d+""").find(it)?.value }
-        val pbt = extractValueAfterKeyword(linhas, listOf("PBT", "PESO BRUTO"))
-            ?.let { Regex("""\d+""").find(it)?.value }
-        val cmt = extractValueAfterKeyword(linhas, listOf("CMT", "CAPACIDADE MÁXIMA"))
-            ?.let { Regex("""\d+""").find(it)?.value }
-        val capacidade = extractValueAfterKeyword(linhas, listOf("LOTAÇÃO", "PASSAGEIROS", "CAP."))
-            ?.let { Regex("""\d+""").find(it)?.value }
+        val placa = extrairPlacaCrlv(up)
+        val renavam = extrairRenavam(up)
+        val chassi = extrairChassi(norm)
+        val cpfCnpj = extrairCpf(raw) ?: extrairCnpj(raw)
+        val proprietario = extrairProprietario(up)
+        val (marca, modelo) = extrairMarcaModelo(up)
+        val cor = extrairCor(up)
+        val (anoFab, anoMod) = extrairAnosFabMod(up, renavam)
+        val exercicio = extrairExercicio(up)
+        val (municipio, uf) = extrairMunicipioUf(up)
+        val validade = RX_VALIDADE_CRLV.find(up)?.value
+        val (potencia, cilindrada) = extrairPotenciaCilindrada(up)
+        val especie = extrairPalavraApos(up, listOf("ESPECIE","ESPÉCIE","ESPTCE","ESPCEI","ESPE[CÇ]IE"))
+        val combustivel = extrairCombustivel(up)
+        val categoria = CATEGORIAS_VEICULO.firstOrNull { up.contains(it) }
 
         return DadosCRLV(
             placa = placa,
@@ -269,584 +170,418 @@ object DocumentoOcrProcessador
             corPredominante = cor,
             combustivel = combustivel,
             especie = especie,
-            tipo = tipo,
-            categoria = categoriaVeiculo,
+            tipo = null,
+            categoria = categoria,
             municipio = municipio,
             uf = uf,
             validade = validade,
             exercicio = exercicio,
             potencia = potencia,
             cilindrada = cilindrada,
-            pbt = pbt,
-            cmt = cmt,
-            capacidade = capacidade,
-            rawText = rawText
+            pbt = null,
+            cmt = null,
+            capacidade = null,
+            rawText = raw
         )
     }
 
+    // Placa — primeira ocorrência não precedida de contexto motor
+    private fun extrairPlacaCrlv(up: String): String? {
+        // Evita capturar o número do motor (padrão similar)
+        val excluirApos = setOf("MOTOR", "CRV", "ANTERIOR")
+        return RX_PLACA.findAll(up).firstOrNull { m ->
+            val antes = up.substring(maxOf(0, m.range.first - 15), m.range.first).trim()
+            excluirApos.none { antes.endsWith(it) }
+        }?.value?.uppercase()?.replace(" ","")?.replace("-","")?.let { bruto ->
+            if (bruto.length == 7 && bruto[3].isDigit() && bruto[4].isLetter()) bruto
+            else if (bruto.length == 7) "${bruto.take(3)}-${bruto.drop(3)}"
+            else bruto
+        }
+    }
 
-    /**
-     * Extrai a placa do veículo, suportando formato Mercosul e antigo.
-     * Tenta primeiro pelo rótulo e depois varre o texto completo.
-     */
-    private fun extrairPlaca(linhas: List<String>, rawText: String): String?
-    {
-        // Por rótulo
-        val porRotulo = extractValueAfterKeyword(linhas, listOf("PLACA", "PLACA DO VEÍCULO"))
-            ?.let { regexPlaca.find(it)?.value?.uppercase() }
-        if (porRotulo != null) return porRotulo
+    // RENAVAM — âncora textual "RENAVAM/RENAVAN" + dígitos
+    private fun extrairRenavam(up: String): String? {
+        val porAncora = RX_RENAVAM_ANCORA.find(up)?.groupValues?.get(1)
+        if (porAncora != null) return porAncora
 
-        // Varredura — pega a primeira ocorrência que parece placa de carro
-        return regexPlaca.find(rawText.uppercase())?.value
-            ?.replace(" ", "")
-            ?.replace("-", "")
-            ?.let { raw ->
-                // Formata: se Mercosul (7 chars), devolve sem hífen; se antigo, ABC-1234
-                if (raw.length == 7 && raw[3].isDigit() && raw[4].isLetter()) raw  // Mercosul
-                else if (raw.length == 7) "${raw.substring(0, 3)}-${raw.substring(3)}" // Antigo
-                else raw
+        // Fallback: número de 11 dígitos que não seja o CRV
+        val crv = RX_CRV.find(up)?.groupValues?.get(1) ?: ""
+        return Regex("""(?<!\d)(\d{11})(?!\d)""").findAll(up)
+            .map { it.groupValues[1] }
+            .firstOrNull { it != crv && !lembaCpf(it, up) }
+    }
+
+    // Chassi VIN 17 chars — texto normalizado para corrigir I/O/Q do OCR
+    private fun extrairChassi(norm: String): String? {
+        // Tenta com texto sem espaços (OCR pode fragmentar o VIN)
+        val semEspacos = norm.replace(" ", "")
+        val m1 = RX_CHASSI.find(semEspacos)?.value
+        if (m1 != null) return m1
+
+        // Tenta no texto com espaços
+        return RX_CHASSI.find(norm)?.value
+    }
+
+    // CPF com pontuação: 000.000.000-00
+    private fun extrairCpf(raw: String): String? {
+        return RX_CPF.find(raw)?.value
+    }
+
+    // CNPJ: 00.000.000/0000-00
+    private fun extrairCnpj(raw: String): String? =
+        Regex("""\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}""").find(raw)?.value
+
+    // Proprietário — aparece após MUNICÍPIO+UF, antes de DADOS/SEGURO/CPF
+    private fun extrairProprietario(up: String): String? {
+        // Padrão: "... UF [NOME EM MAIÚSCULAS] DADOS/SEGURO/CPF"
+        val m = Regex("""\b([A-Z]{2})\s+([A-Z]{3,}(?:\s+[A-Z]{2,}){2,6}?)\s+(?:DADOS|CPF|REPASSE|SEGURO)""")
+            .find(up)
+        if (m != null) {
+            val candidato = m.groupValues[2].trim()
+            if (candidato.split(" ").size >= 2) return candidato
+        }
+
+        // Fallback: NOME LOCAL ... UF NOME_PROPRIO
+        val m2 = Regex("""(?:NOME\s+LOCAL|LOCAL)\s+\S+(?:\s+\S+)?\s+[A-Z]{2}\s+([A-Z]{3,}(?:\s+[A-Z]{3,}){1,5})""")
+            .find(up)
+        return m2?.groupValues?.get(1)?.trim()
+            ?.takeIf { it.split(" ").size >= 2 }
+    }
+
+    // Marca e modelo: FORD/KA SE 1.0 (barra como separador ou espaço)
+    private fun extrairMarcaModelo(up: String): Pair<String?, String?> {
+        for (marca in MARCAS) {
+            // Padrão: MARCA/MODELO ou MARCA MODELO (sem outra palavra maiúscula antes)
+            val rx = Regex("""(?<![A-Z])(${Regex.escape(marca)})[/ ]([A-Z0-9][A-Z0-9/\.\s]{2,30}?)(?=\s{2,}|\s+(?:${CORES.joinToString("|")})|ESP|COR|PRDOMINANTE|COMBUSTIVEL|ALCOOL|GASOLINA|PASSAGEIRO|AUTOMOVEL|CATEGORIA|POTENCIA)""")
+            val m = rx.find(up)
+            if (m != null) {
+                return Pair(m.groupValues[1].trim(), m.groupValues[2].trim())
             }
-    }
-
-    /**
-     * Extrai o chassi (VIN de 17 chars).
-     * O OCR pode trocar 'O' por '0', 'I' por '1' — faz normalização básica.
-     */
-    private fun extrairChassi(linhas: List<String>, rawText: String): String?
-    {
-        // Função interna rápida para limpar sujeiras (tira espaços, hifens, pontos)
-        fun limparOcr(texto: String): String
-        {
-            return texto.uppercase()
-                .replace(Regex("[^A-Z0-9]"), "") // Remove tudo que não for letra ou número
-                .replace("O",
-                    "0")               // Corrige erro crônico de OCR (Letra O -> Número 0)
-                .replace("I",
-                    "1")               // Corrige erro crônico de OCR (Letra I -> Número 1)
-                .replace("Q", "0")               // Corrige erro de OCR (Letra Q -> Número 0)
         }
 
-        // 1. Busca por rótulo
-        val valorRotulo = extractValueAfterKeyword(
-            linhas, listOf("CHASSI", "NÚM. DO CHASSI", "NUMERO DO CHASSI", "N° CHASSI", "CHASSIS")
-        )
-
-        if (valorRotulo != null)
-        {
-            val trechoLimpo = limparOcr(valorRotulo)
-            val match = regexChassi.find(trechoLimpo)
-            if (match != null) return match.value
+        // Fallback: qualquer PALAVRA/PALAVRA2 com barra (VW/GOL etc.)
+        val mBarra = Regex("""([A-Z]{2,})/([A-Z0-9][A-Z0-9\s\.]{2,20}?)(?=\s+(?:${CORES.joinToString("|")})|ESP|COR|\s{2})""")
+            .find(up)
+        if (mBarra != null) {
+            return Pair(mBarra.groupValues[1].trim(), mBarra.groupValues[2].trim())
         }
 
-        // 2. Fallback no texto completo (rawText)
-        // Limpamos o rawText inteiro. Isso resolve o problema de o OCR ler o chassi
-        // quebrado em pedaços com espaços no meio (ex: "9 B W Z Z Z ...")
-        val rawTextLimpo = limparOcr(rawText)
-
-        return regexChassi.find(rawTextLimpo)?.value
-    }
-
-    /**
-     * Extrai marca e modelo do CRLV.
-     * O campo geralmente aparece como "MARCA/MODELO/VERSÃO" em uma linha
-     * com o valor logo abaixo (ex: "VOLKSWAGEN / GOL 1.0 CITY FLEX 4P").
-     */
-    private fun extrairMarcaModelo(linhas: List<String>, rawText: String): Pair<String?, String?>
-    {
-        val rotulosMarca = listOf(
-            "MARCA/MODELO/VERSÃO", "MARCA/MODELO", "MARCA / MODELO",
-            "MARCA", "FABRICANTE"
-        )
-        val linha = extractLineAfterKeyword(linhas, rotulosMarca) ?: return Pair(null, null)
-
-        val partes = linha.split(Regex("""\s*/\s*"""), limit = 2)
-        return if (partes.size >= 2)
-        {
-            Pair(partes[0].trim().uppercase(), partes[1].trim().uppercase())
-        }
-        else
-        {
-            // Tenta separar pela primeira palavra (marca) do resto (modelo)
-            val palavras = linha.trim().uppercase().split(" ", limit = 2)
-            Pair(palavras.firstOrNull(), palavras.getOrNull(1))
-        }
-    }
-
-    fun extrairCor(linhas: List<String>): String?
-    {
-        val valorExtraido = extractValueAfterKeyword(
-            linhas, listOf("COR PREDOMINANTE", "COR PRED", "COR")
-        )?.uppercase()?.trim() ?: return null
-
-        val textoLimpo = valorExtraido
-            .replace(regexApenasLetras, "")
-            .trim()
-
-        if (textoLimpo.isBlank()) return null
-
-        val corEncontrada = CORES_OFICIAIS.firstOrNull { corOficial ->
-            textoLimpo.contains(corOficial) ||
-                    (corOficial.length > 4 && textoLimpo.startsWith(corOficial.substring(0,
-                        corOficial.length - 1)))
-        }
-
-        if (corEncontrada != null)
-        {
-            return corEncontrada
-        }
-
-        val primeiraPalavra = textoLimpo.split(Regex("\\s+")).firstOrNull()
-        return primeiraPalavra?.takeIf { it.length >= 3 }
-
-    }
-
-    fun extrairCategoria(linhas: List<String>): String?
-    {
-        val valorExtraido = extractValueAfterKeyword(
-            linhas, listOf("CATEGORIA", "CAT.")
-        )?.uppercase()?.trim() ?: return null
-        val textoLimpo = valorExtraido
-            .replace(regexApenasLetrasECat, "")
-            .trim()
-
-        if (textoLimpo.isBlank()) return null
-
-        val categoriaEncontrada = CATEGORIAS_OFICIAIS.firstOrNull { catOficial ->
-            textoLimpo.contains(catOficial)
-        }
-
-        if (categoriaEncontrada != null)
-        {
-            // Retorna o padrão corrigido sem acento se preferir, ou o encontrado
-            return if (categoriaEncontrada == "COLECAO") "COLEÇÃO" else categoriaEncontrada
-        }
-
-        val primeiraPalavra = textoLimpo.split(Regex("\\s+")).firstOrNull() ?: ""
-        if (primeiraPalavra.length >= 4)
-        {
-            return primeiraPalavra
-        }
-
-        return null
-    }
-
-    /**
-     * Extrai ano de fabricação e ano do modelo.
-     * O CRLV geralmente exibe "ANO FAB. ANO MOD." na mesma linha ou em linhas separadas.
-     */
-    private fun extrairAnos(linhas: List<String>, rawText: String): Pair<String?, String?>
-    {
-        val linhasFiltradas = linhas.filterNot { linha ->
-            val up = linha.uppercase()
-            up.contains("EXERC") // Ignora "EXERCÍCIO", "EXERC.", "EXERCICIO"
-        }
-
-        val linhaCombinada = linhasFiltradas.firstOrNull { linha ->
-            val up = linha.uppercase()
-            (up.contains("ANO") || up.contains("FAB")) &&
-                    Regex("""\d{4}\s*/\s*\d{4}""").containsMatchIn(linha)
-        }
-        if (linhaCombinada != null)
-        {
-            val anos = Regex("""\d{4}""").findAll(linhaCombinada).map { it.value }.toList()
-            if (anos.size >= 2) return Pair(anos[0], anos[1])
-        }
-
-        val anoFabricacao = extractValueAfterKeyword(
-            linhasFiltradas, listOf("ANO FAB", "ANO DE FABRICAÇÃO", "ANO FABRICAÇÃO", "ANO FAB.")
-        )?.let { regexAno.find(it)?.value }
-
-        val anoModelo = extractValueAfterKeyword(
-            linhasFiltradas, listOf("ANO MOD", "ANO DO MODELO", "ANO MODELO", "ANO MOD.")
-        )?.let { regexAno.find(it)?.value }
-
-        if (anoFabricacao == null && anoModelo == null)
-        {
-            // Remove a linha do exercício do rawText antes de aplicar o regex genérico
-            val rawTextSemExercicio = rawText.lines()
-                .filterNot { it.uppercase().contains("EXERC") }
-                .joinToString("\n")
-
-            val anos = regexAno.findAll(rawTextSemExercicio).map { it.value }.distinct().take(2)
-                .toList()
-            return Pair(anos.getOrNull(0), anos.getOrNull(1))
-        }
-
-        return Pair(anoFabricacao, anoModelo)
-    }
-
-    /**
-     * Extrai município e UF do CRLV.
-     * Exemplo: "SÃO PAULO - SP" ou "MUNICÍPIO: CAMPINAS UF: SP"
-     */
-    private fun extrairMunicipioUf(
-        linhas: List<String>,
-        rawText: String,
-        placa: String?
-    ): Pair<String?, String?>
-    {
-        // Por rótulo
-        val linhaMunicipio = extractLineAfterKeyword(
-            linhas, listOf("LOCAL")
-        )
-
-        if (linhaMunicipio != null)
-        {
-            // Tenta separar "CIDADE - UF"
-            val match = Regex("""^(.+?)\s*[-–]\s*([A-Z]{2})$""")
-                .find(linhaMunicipio.trim().uppercase())
-            if (match != null)
-            {
-                return Pair(match.groupValues[1].trim(), match.groupValues[2])
-            }
-            // Extrai UF (2 letras no final)
-            val uf = Regex("""\b([A-Z]{2})\b""").findAll(linhaMunicipio.uppercase())
-                .lastOrNull()?.value
-            return Pair(linhaMunicipio.replace(uf ?: "", "").trim().uppercase(), uf)
-        }
-
-        // Fallback: linha na mesma posição que a placa (CRLV antigo)
         return Pair(null, null)
     }
 
-    /**
-     * Extrai CPF (11 dígitos) ou CNPJ (14 dígitos) do proprietário.
-     */
-    private fun extrairCpfOuCnpj(linhas: List<String>, rawText: String): String?
-    {
-        val regexCnpj = Regex("""(?<!\d)(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2})(?!\d)""")
+    // Cor — busca a primeira cor oficial no texto
+    private fun extrairCor(up: String): String? =
+        CORES.firstOrNull { up.contains(it) }
 
-        // Por rótulo de CPF
-        val cpfPorRotulo = extractValueAfterKeyword(linhas, listOf("CPF", "CPF/CNPJ"))
-            ?.let { regexCpf.find(it)?.value?.formatarCpf() }
-        if (cpfPorRotulo != null) return cpfPorRotulo
+    // Anos de fabricação e modelo — exclui o exercício e o CRV
+    private fun extrairAnosFabMod(up: String, renavam: String?): Pair<String?, String?> {
+        val excluir = mutableSetOf<String>()
 
-        val cnpjPorRotulo = extractValueAfterKeyword(linhas, listOf("CNPJ"))
-            ?.let { regexCnpj.find(it)?.value }
-        if (cnpjPorRotulo != null) return cnpjPorRotulo
+        // Exercício
+        extrairExercicio(up)?.let { excluir.add(it) }
+        // CRV — primeiros 4 dígitos se for longo
+        RX_CRV.find(up)?.groupValues?.get(1)?.take(4)?.let { excluir.add(it) }
 
-        regexCnpj.find(rawText)?.value?.let { return it }
+        // "ANO FABRICACAO XXXX" e "ANO MODELO XXXX"
+        val fabExplicito = Regex("""(?:ANO\s+FABRICA[CÇ][AÃ]O|ANO\s+FAB\.?)\s+(\d{4})""", RegexOption.IGNORE_CASE)
+            .find(up)?.groupValues?.get(1)
+        val modExplicito = Regex("""(?:ANO\s+MODELO?|ANO\s+MOD\.?)\s+(\d{4})""", RegexOption.IGNORE_CASE)
+            .find(up)?.groupValues?.get(1)
 
-        return regexCpf.find(rawText)?.value?.formatarCpf()
+        if (fabExplicito != null && modExplicito != null) return Pair(fabExplicito, modExplicito)
+
+        // Fallback: primeiros dois anos que não estão na lista de exclusão
+        val todos = RX_ANO.findAll(up).map { it.groupValues[1] }
+            .filter { it !in excluir }
+            .distinct().toList()
+
+        return Pair(todos.getOrNull(0) ?: fabExplicito, todos.getOrNull(1) ?: modExplicito)
     }
 
-    // ── Processamento CNH ─────────────────────────────────────────────────────
+    // Exercício: ano de licenciamento — normalmente o mais recente
+    private fun extrairExercicio(up: String): String? {
+        val m = Regex("""(?:EXERCI[CÇ][OA0]|EXERCIC[OA])\s+(?:\S+\s+){0,3}?(\d{4})""",
+            RegexOption.IGNORE_CASE).find(up)
+        return m?.groupValues?.get(1)
+    }
 
-    private fun processarCnh(linhas: List<String>, rawText: String, mlText: Text): DadosCNH
-    {
+    // Município e UF — "CIDADE UF" onde UF = 2 letras maiúsculas
+    private fun extrairMunicipioUf(up: String): Pair<String?, String?> {
+        // Padrão: NOME LOCAL CIDADE UF / LOCAL CIDADE-UF
+        val m = Regex("""(?:NOME\s+LOCAL|LOCAL)\s+([A-ZÁÉÍÓÚÂÊÔÇ][A-ZÁÉÍÓÚÂÊÔÇ\s]+?)\s+\b([A-Z]{2})\b""")
+            .find(up)
+        if (m != null) return Pair(m.groupValues[1].trim(), m.groupValues[2])
 
-        val nome = extractLineAfterKeyword(linhas,
-            listOf("NOME E SOBRENOME", "NOME SOBRENOME", "2E1", "2e1"))
-            ?: extrairNomeFallBack(linhas)
+        // Fallback: qualquer CIDADE-UF (2 palavras maiúsculas + sigla)
+        val m2 = Regex("""([A-Z][A-Z\s]{3,20}?)\s+\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b""")
+            .find(up)
+        return Pair(m2?.groupValues?.get(1)?.trim(), m2?.groupValues?.get(2))
+    }
 
-        val primeiraHab = extractDateAfterKeyword(linhas,
-            listOf("1ª HABILITAÇÃO", "1a HABILITAÇÃO", "1A HABILITAÇÃO", "PRIMEIRA HABILITAÇÃO"))
-            ?: extractDateAfterKeyword(linhas, listOf("1a", "1ª"))
+    // Potência e cilindrada: "85CV/997" ou "85 CV 997"
+    private fun extrairPotenciaCilindrada(up: String): Pair<String?, String?> {
+        val m = RX_POTENCIA.find(up) ?: return Pair(null, null)
+        return Pair(m.groupValues[1], m.groupValues[2])
+    }
 
-        val (dataNascimento, localNascimento) = extrairNascimento(linhas, rawText)
-        val dataEmissao = extractDateAfterKeyword(linhas,
-            listOf("DATA EMISSÃO", "EMISSÃO", "EMISSAO", "4A", "4a"))
-        val dataValidade = extractDateAfterKeyword(linhas, listOf("VALIDADE", "4B", "4b", "VALID"))
-        val (rg, orgaoEmissor) = extrairRgEOrgao(linhas, rawText)
-        val cpf = extrairCpf(linhas, rawText)
-        val numeroRegistro = extrairNumeroRegistro(linhas, rawText, cpf)
-        val categoria = extrairCategoria(linhas, rawText)
-        val filiacao = extractLineAfterKeyword(linhas, listOf("FILIAÇÃO", "FILIACAO"))
-        val nacionalidade = extractLineAfterKeyword(linhas, listOf("NACIONALIDADE"))
+    // Combustível: ALCOOL/GASOLINA, FLEX, DIESEL, ELETRICO
+    private fun extrairCombustivel(up: String): String? {
+        val padroes = listOf(
+            Regex("""(ALCOOL[\s/]+GASOLINA|FLEX)""", RegexOption.IGNORE_CASE),
+            Regex("""(GASOLINA)""", RegexOption.IGNORE_CASE),
+            Regex("""(DIESEL)""", RegexOption.IGNORE_CASE),
+            Regex("""(ELETRICO|ELÉTRICO)""", RegexOption.IGNORE_CASE),
+            Regex("""(GNV)""", RegexOption.IGNORE_CASE)
+        )
+        return padroes.firstNotNullOfOrNull { it.find(up)?.groupValues?.get(1)?.uppercase() }
+    }
 
-        val todasDatas = regexData.findAll(rawText).map { it.value }.toList()
-        val datasUsadas = listOfNotNull(dataNascimento,
-            primeiraHab,
-            dataEmissao,
-            dataValidade).toMutableList()
+    // Palavra após um rótulo (espécie, tipo etc.)
+    private fun extrairPalavraApos(up: String, rotulos: List<String>): String? {
+        for (rotulo in rotulos) {
+            val m = Regex("""$rotulo\s+(\S+)""", RegexOption.IGNORE_CASE).find(up)
+            if (m != null) return m.groupValues[1].uppercase()
+        }
+        return null
+    }
 
-        fun proximaData(): String? = todasDatas.firstOrNull { it !in datasUsadas }
-            ?.also { datasUsadas.add(it) }
+    // ─────────────────────────────────────────────────────────────────────────
+    // CNH
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun processarCnh(raw: String, up: String, mlText: Text): DadosCNH {
+        val datas = RX_DATA.findAll(raw).map { it.value }.toList()
+        val cpf = extrairCpf(raw) ?: extrairCpfCompacto(raw, up)
+        val rg = extrairRg(raw, up, cpf)
+        val nome = extrairNomeCnh(up, mlText)
+        val categoria = extrairCategoriaCnh(up)
+        val numeroRegistro = extrairNumeroRegistroCnh(up, cpf)
+        val filiacao = extrairJanela(up, listOf("FILIAÇÃO","FILIACAO"), stopWords = PALAVRAS_CHAVE_CNH)
+        val localNascimento = extrairJanela(up, listOf("LOCAL","NASCIMENTO"), stopWords = PALAVRAS_CHAVE_CNH)
+        val nacionalidade = extrairJanela(up, listOf("NACIONALIDADE"), stopWords = PALAVRAS_CHAVE_CNH)
+
+        // Atribui datas por posição contextual
+        val dataPool = datas.toMutableList()
+        fun proxData() = dataPool.removeFirstOrNull()
+
+        val dataNasc = extrairDataApos(up, listOf("NASC","DATA DE NASC")) ?: proxData()
+        val primeiraHab = extrairDataApos(up, listOf("1ª HAB","1A HAB","PRIMEIRA HAB")) ?: proxData()
+        val emissao = extrairDataApos(up, listOf("EMISSÃO","EMISSAO","DATA EMISSÃO")) ?: proxData()
+        val validade = extrairDataApos(up, listOf("VALIDADE","VALID")) ?: proxData()
 
         return DadosCNH(
             nome = nome,
             cpf = cpf,
             rg = rg,
-            dataNascimento = dataNascimento ?: proximaData(),
+            dataNascimento = dataNasc,
             localNascimento = localNascimento,
             numeroRegistro = numeroRegistro,
-            primeiraHabilitacao = primeiraHab ?: proximaData(),
-            dataEmissao = dataEmissao ?: proximaData(),
-            dataValidade = dataValidade ?: proximaData(),
+            primeiraHabilitacao = primeiraHab,
+            dataEmissao = emissao,
+            dataValidade = validade,
             categoria = categoria,
-            orgaoEmissor = orgaoEmissor,
+            orgaoEmissor = null,
             filiacao = filiacao,
             nacionalidade = nacionalidade,
-            rawText = rawText
+            rawText = raw
         )
     }
 
-    private fun extrairNascimento(linhas: List<String>, rawText: String): Pair<String?, String?>
-    {
-        val rotulosNasc = listOf("DATA", "LOCAL", "NASCIMENTO", "3", "DATA NASC")
-        val linhaRotulo = findLineContaining(linhas, rotulosNasc)
-        val linhaConteudo = linhaRotulo?.let { getNextContentLine(linhas, it) }
+    /**
+     * Nome na CNH: busca em cascata.
+     * 1. Rótulo "NOME" ou "2E1" → próxima linha/bloco não-rótulo
+     * 2. Blocos do ML Kit: bloco após bloco contendo rótulo
+     * 3. Heurística: linha toda maiúsculas, ≥2 palavras, ≥8 chars, sem dígitos
+     */
+    private fun extrairNomeCnh(up: String, mlText: Text): String? {
+        val rotulosNome = listOf("NOME E SOBRENOME","NOME SOBRENOME","NOME COMPLETO","NOME","2E1","2 E 1")
+        val ignorar = setOf("REPÚBLICA","FEDERATIVA","BRASIL","HABILITAÇÃO","DETRAN","MINISTÉRIO",
+            "SECRETARIA","SENATRAN","DENATRAN","CARTEIRA","NACIONAL","DRIVER","BRASILEIRO",
+            "REGISTRO","CATEGORIA","VALIDADE","EMISSÃO","FILIAÇÃO","IDENTIDADE","NATURALIDADE")
 
-        val data = linhaConteudo?.let { regexData.find(it)?.value }
-        val local = linhaConteudo?.replace(regexData, "")?.trim()?.takeIf { it.isNotBlank() }
-
-        return Pair(
-            data ?: regexData.findAll(rawText).map { it.value }.firstOrNull(),
-            local
-        )
-    }
-
-    private fun extrairRgEOrgao(linhas: List<String>, rawText: String): Pair<String?, String?>
-    {
-        val rotulosDoc = listOf("DOC. IDENTIDADE",
-            "DOC IDENTIDADE",
-            "IDENTIDADE",
-            "4C",
-            "4c",
-            "RG",
-            "REGISTRO GERAL")
-        val linhaDoc = findLineContaining(linhas, rotulosDoc)
-        val conteudo = linhaDoc?.let { getNextContentLine(linhas, it) }
-
-        val rg = conteudo?.let { regexRg.find(it)?.value }
-            ?: extractValueAfterKeyword(linhas, listOf("RG", "REGISTRO GERAL", "DOC. IDENTIDADE"))
-                ?.let { regexRg.find(it)?.value }
-            ?: regexRg.find(rawText)?.value
-
-        val orgao = conteudo
-            ?.replace(regexRg, "")
-            ?.replace(Regex("""\d"""), "")
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-
-        return Pair(rg, orgao)
-    }
-
-    private fun extrairCpf(linhas: List<String>, rawText: String): String?
-    {
-        val porRotulo = extractValueAfterKeyword(linhas, listOf("CPF", "4D", "4d"))
-            ?.let { regexCpf.find(it)?.value?.formatarCpf() }
-        if (porRotulo != null) return porRotulo
-
-        val formatado = Regex("""\d{3}\.\d{3}\.\d{3}-\d{2}""").find(rawText)?.value
-        if (formatado != null) return formatado
-
-        return regexCpf.find(rawText)?.value?.let { raw ->
-            val digits = raw.replace(Regex("""\D"""), "")
-            if (digits.length == 11) digits.formatarCpf() else null
+        // 1. Rótulo no texto plano
+        for (rotulo in rotulosNome) {
+            val idx = up.indexOf(rotulo)
+            if (idx < 0) continue
+            val depois = up.substring(idx + rotulo.length).trimStart()
+            // Pega a sequência de letras e espaços até o próximo separador
+            val candidato = Regex("""^([A-ZÁÉÍÓÚÂÊÔÇ]{3,}(?:\s+[A-ZÁÉÍÓÚÂÊÔÇ]{2,}){1,6})""")
+                .find(depois)?.groupValues?.get(1)?.trim()
+            if (candidato != null && ignorar.none { candidato.contains(it) }) return candidato
         }
+
+        // 2. Blocos do ML Kit
+        for ((i, block) in mlText.textBlocks.withIndex()) {
+            if (rotulosNome.any { block.text.uppercase().contains(it) }) {
+                val prox = mlText.textBlocks.getOrNull(i + 1)?.text?.trim() ?: continue
+                if (pareceNome(prox) && ignorar.none { prox.uppercase().contains(it) })
+                    return prox
+            }
+        }
+
+        // 3. Heurística
+        return up.lines()
+            .map { it.trim() }
+            .firstOrNull { linha ->
+                linha.length >= 8 &&
+                        linha.split(" ").size >= 2 &&
+                        linha.none { it.isDigit() } &&
+                        ignorar.none { linha.contains(it) } &&
+                        linha.all { it.isLetter() || it == ' ' || it == '\'' || it == '-' }
+            }
     }
 
-    private fun extrairNumeroRegistro(linhas: List<String>, rawText: String, cpf: String?): String?
-    {
+    private fun extrairRg(raw: String, up: String, cpf: String?): String? {
         val cpfDigits = cpf?.replace(Regex("""\D"""), "") ?: ""
+        // RG formatado: XX.XXX.XXX-X
+        val mFormatado = Regex("""\d{1,2}\.\d{3}\.\d{3}-[\dXx]""").find(raw)
+        if (mFormatado != null) return mFormatado.value
 
-        val porRotulo = extractValueAfterKeyword(
-            linhas, listOf("REGISTRO", "Nº REGISTRO", "N° REGISTRO", "N. REGISTRO", "5")
-        )?.let { regexRegistroCnh.find(it)?.value }
+        // Contexto: após "RG" ou "IDENTIDADE"
+        val mContexto = Regex("""(?:RG|IDENTIDADE|DOC\.?\s+IDENTIDADE)\s+([\d.\-X]+)""",
+            RegexOption.IGNORE_CASE).find(up)
+        val candidato = mContexto?.groupValues?.get(1)
+        if (candidato != null && candidato.replace(Regex("""\D"""),"") != cpfDigits)
+            return candidato
 
-        if (porRotulo != null && porRotulo != cpfDigits) return porRotulo
-
-        return regexRegistroCnh.findAll(rawText)
-            .map { it.value }
-            .firstOrNull { num -> num.length in 9..11 && num != cpfDigits }
+        return null
     }
 
-    // ── Processamento RG ──────────────────────────────────────────────────────
+    private fun extrairCategoriaCnh(up: String): String? {
+        // Contexto direto
+        val m = Regex("""(?:CAT\.?\s*HAB\.?|CATEGORIA\s+HAB|CATEGORIA)\s+([ABCDE]{1,2})(?![A-Z])""",
+            RegexOption.IGNORE_CASE).find(up)
+        if (m != null && m.groupValues[1].uppercase() in CATEGORIAS_CNH)
+            return m.groupValues[1].uppercase()
 
-    private fun processarRg(linhas: List<String>, rawText: String): DadosRG
-    {
-        val datas = regexData.findAll(rawText).map { it.value }.toList()
-        val cpf = extrairCpf(linhas, rawText)
-        val numeroRg = extrairRgEOrgao(linhas, rawText).first
+        // Linha isolada com apenas a categoria
+        return up.lines().map { it.trim() }
+            .firstOrNull { it.uppercase() in CATEGORIAS_CNH }
+    }
 
-        val nome = extractLineAfterKeyword(linhas, listOf("NOME"))
-            ?: extrairNomeFallBack(linhas)
+    private fun extrairNumeroRegistroCnh(up: String, cpf: String?): String? {
+        val cpfDigits = cpf?.replace(Regex("""\D"""), "") ?: ""
+        val m = Regex("""(?:REGISTRO|Nº\s*REGISTRO|N°\s*REGISTRO)\s+(\d{9,11})""",
+            RegexOption.IGNORE_CASE).find(up)
+        return m?.groupValues?.get(1)?.takeIf { it != cpfDigits }
+            ?: Regex("""(?<!\d)(\d{11})(?!\d)""").findAll(up)
+                .map { it.groupValues[1] }
+                .firstOrNull { it != cpfDigits }
+    }
 
-        val nomeMae = extractLineAfterKeyword(linhas, listOf("MÃE", "MAE", "FILIAÇÃO", "FILIACAO"))
-        val nomePai = extractLineAfterKeyword(linhas, listOf("PAI"))
-        val naturalidade = extractLineAfterKeyword(linhas, listOf("NATURALIDADE", "NATURAL"))
+    private fun extrairDataApos(up: String, rotulos: List<String>): String? {
+        for (rotulo in rotulos) {
+            val idx = up.indexOf(rotulo)
+            if (idx < 0) continue
+            val m = RX_DATA.find(up.substring(idx))
+            if (m != null) return m.value
+        }
+        return null
+    }
+
+    /**
+     * Extrai o valor de texto após um rótulo, parando na primeira stopword.
+     */
+    private fun extrairJanela(up: String, rotulos: List<String>, stopWords: Set<String>): String? {
+        for (rotulo in rotulos) {
+            val idx = up.indexOf(rotulo)
+            if (idx < 0) continue
+            val trecho = up.substring(idx + rotulo.length).trimStart()
+            // Pega até 40 chars ou até encontrar dígito/stopword
+            val candidato = Regex("""^([A-ZÁÉÍÓÚÂÊÔÇ\s\-']{4,40}?)(?=\s+\d|\s{3,}|$)""")
+                .find(trecho)?.groupValues?.get(1)?.trim()
+            if (!candidato.isNullOrBlank() && stopWords.none { candidato.contains(it) })
+                return candidato
+        }
+        return null
+    }
+
+    private val PALAVRAS_CHAVE_CNH = setOf(
+        "HABILITAÇÃO","EMISSÃO","VALIDADE","REGISTRO","CATEGORIA","CPF","FILIAÇÃO",
+        "NACIONAL","DETRAN","SENATRAN","DATA","LOCAL"
+    )
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RG
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun processarRg(raw: String, up: String): DadosRG {
+        val datas = RX_DATA.findAll(raw).map { it.value }.toList()
+        val cpf = extrairCpf(raw)
+        val rg = extrairRg(raw, up, cpf)
+        val nome = extrairNomeRg(up)
+        val nomeMae = extrairJanela(up, listOf("MÃE","MAE","FILIAÇÃO","FILIACAO"),
+            stopWords = setOf("PAI","DATA","NATURAL","CPF","RG"))
+        val nomePai = extrairJanela(up, listOf("PAI"),
+            stopWords = setOf("MÃE","DATA","NATURAL","CPF","RG"))
+        val naturalidade = extrairJanela(up, listOf("NATURALIDADE","NATURAL"),
+            stopWords = setOf("DATA","CPF","RG","MÃE"))
 
         return DadosRG(
             nome = nome,
-            rg = numeroRg,
+            rg = rg,
             cpf = cpf,
             dataNascimento = datas.firstOrNull(),
             nomeMae = nomeMae,
             nomePai = nomePai,
             naturalidade = naturalidade,
             dataEmissao = datas.lastOrNull(),
-            rawText = rawText
+            rawText = raw
         )
     }
 
+    private fun extrairNomeRg(up: String): String? {
+        val porRotulo = Regex("""(?:NOME)\s+([A-ZÁÉÍÓÚÂÊÔÇ]{3,}(?:\s+[A-ZÁÉÍÓÚÂÊÔÇ]{2,}){1,6})""")
+            .find(up)?.groupValues?.get(1)?.trim()
+        if (porRotulo != null) return porRotulo
 
-    private fun extrairCategoria(linhas: List<String>, rawText: String): String?
-    {
+        val ignorar = setOf("REPÚBLICA","FEDERATIVA","BRASIL","SECRETARIA","SEGURANÇA","IDENTIDADE")
+        return up.lines().map { it.trim() }.firstOrNull { linha ->
+            pareceNome(linha) && ignorar.none { linha.contains(it) }
+        }
+    }
 
-        for (rotulo in rotulosCategoria)
-        {
-            val idxRotulo = linhas.indexOfFirst { linha ->
-                linha.uppercase().contains(rotulo.uppercase())
+    // ─────────────────────────────────────────────────────────────────────────
+    // Utilitários
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Normaliza apenas a parte numérica/alfanumérica para extrair chassi e RENAVAM.
+     * Substitui letras ambíguas por dígitos — NÃO usar em campos de texto livre.
+     */
+    private fun normalizarNumerico(texto: String): String =
+        texto.uppercase()
+            .replace('O', '0')
+            .replace('I', '1')
+            .replace('Q', '0')
+            .replace('S', '5')
+
+    /** Verifica se uma string parece nome próprio (≥2 palavras, sem dígitos) */
+    private fun pareceNome(texto: String): Boolean {
+        val limpo = texto.trim()
+        return limpo.length >= 6 &&
+                limpo.split(" ").size >= 2 &&
+                limpo.none { it.isDigit() } &&
+                limpo.all { it.isLetter() || it == ' ' || it == '\'' || it == '-' }
+    }
+
+    /** Verifica se um número de 11 dígitos aparece no texto com formatação de CPF */
+    private fun lembaCpf(num: String, up: String): Boolean {
+        val cpfFormatado = Regex("""\d{3}\.\d{3}\.\d{3}-\d{2}""")
+        return cpfFormatado.findAll(up).any { m ->
+            m.value.replace(Regex("""\D"""), "") == num
+        }
+    }
+
+    /** CPF compacto: 11 dígitos isolados (sem formatação) — usado como último recurso */
+    private fun extrairCpfCompacto(raw: String, up: String): String? {
+        return RX_CPF_COMPACTO.findAll(raw)
+            .map { it.groupValues[1] }
+            .firstOrNull { num ->
+                // Não é CRV, não é RENAVAM já confirmado, não é ano
+                num.length == 11 && !RX_ANO.containsMatchIn(num)
+            }?.let { digits ->
+                "${digits.substring(0,3)}.${digits.substring(3,6)}.${digits.substring(6,9)}-${digits.substring(9)}"
             }
-            if (idxRotulo < 0) continue
-
-            val mesmaLinha = linhas[idxRotulo]
-            val categoriaInline = extrairCategoriaDeTexto(
-                mesmaLinha.uppercase().substringAfter(rotulo.uppercase()).trim()
-            )
-            if (categoriaInline != null) return categoriaInline
-
-            for (offset in 1..3)
-            {
-                val idx = idxRotulo + offset
-                if (idx >= linhas.size) break
-                val candidato = linhas[idx].trim()
-                val cat = extrairCategoriaDeTexto(candidato)
-                if (cat != null) return cat
-                if (candidato.length > 10 && candidato.none { it.isDigit() }) break
-            }
-        }
-
-        linhas.forEach { linha ->
-            val up = linha.trim().uppercase()
-            if (up in categoriasValidas) return up
-        }
-
-        regexCategoriaExata.findAll(rawText.uppercase()).forEach { match ->
-            val valor = match.groupValues[1].uppercase()
-            if (valor in categoriasValidas)
-            {
-                val posicao = match.range.first
-                val janela = rawText.uppercase().substring(
-                    maxOf(0, posicao - 60),
-                    minOf(rawText.length, posicao + 60)
-                )
-                if (rotulosCategoria.any { janela.contains(it.uppercase()) })
-                {
-                    return valor
-                }
-            }
-        }
-
-        regexCategoriaExata.findAll(rawText.uppercase()).forEach { match ->
-            val valor = match.groupValues[1].uppercase()
-            if (valor in categoriasValidas && valor.length >= 1) return valor
-        }
-
-        return null
-    }
-
-    private fun extrairCategoriaDeTexto(texto: String): String?
-    {
-        if (texto.isBlank()) return null
-        val limpo = texto.trim().uppercase()
-            .replace(Regex("""[():\-\s]+"""), " ")
-            .trim()
-        if (limpo in categoriasValidas) return limpo
-        val match = regexCategoriaExata.find(limpo) ?: return null
-        val candidato = match.groupValues[1].uppercase()
-        return candidato.takeIf { it in categoriasValidas }
-    }
-
-    private fun extractLineAfterKeyword(linhas: List<String>, keywords: List<String>): String?
-    {
-        val idx = linhas.indexOfFirst { line ->
-            keywords.any { kw -> line.uppercase().contains(kw.uppercase()) }
-        }
-        if (idx < 0) return null
-        for (i in (idx + 1) until linhas.size)
-        {
-            val candidate = linhas[i]
-            if (candidate.isNotBlank() && !isLinhaLabel(candidate)) return candidate
-        }
-        return null
-    }
-
-    private fun extractDateAfterKeyword(linhas: List<String>, keywords: List<String>): String?
-    {
-        val labelLine = linhas.firstOrNull { line ->
-            keywords.any { kw -> line.uppercase().contains(kw.uppercase()) }
-        }
-        labelLine?.let { regexData.find(it)?.value }?.let { return it }
-        return extractLineAfterKeyword(linhas, keywords)?.let { regexData.find(it)?.value }
-    }
-
-    private fun extractValueAfterKeyword(linhas: List<String>, keywords: List<String>): String?
-    {
-        val line = linhas.firstOrNull { l ->
-            keywords.any { kw -> l.uppercase().contains(kw.uppercase()) }
-        } ?: return null
-
-        val afterColon = line.substringAfter(":", "").trim()
-        if (afterColon.isNotBlank()) return afterColon
-
-        val keyword = keywords.first { kw -> line.uppercase().contains(kw.uppercase()) }
-        val startIdx = line.uppercase().indexOf(keyword.uppercase()) + keyword.length
-        val afterKeyword = line.substring(startIdx).trim()
-        if (afterKeyword.isNotBlank()) return afterKeyword
-
-        return extractLineAfterKeyword(linhas, keywords)
-    }
-
-    private fun findLineContaining(linhas: List<String>, keywords: List<String>): String? =
-        linhas.firstOrNull { line ->
-            keywords.any { kw -> line.uppercase().contains(kw.uppercase()) }
-        }
-
-    private fun getNextContentLine(linhas: List<String>, labelLine: String): String?
-    {
-        val idx = linhas.indexOf(labelLine)
-        if (idx < 0) return null
-        for (i in (idx + 1) until linhas.size)
-        {
-            if (!isLinhaLabel(linhas[i])) return linhas[i]
-        }
-        return null
-    }
-
-    private fun isLinhaLabel(linha: String): Boolean
-    {
-        val up = linha.uppercase()
-        val labelKeywords = listOf(
-            "NOME", "SOBRENOME", "HABILITAÇÃO", "EMISSÃO", "VALIDADE",
-            "REGISTRO", "IDENTIDADE", "CPF", "CATEGORIA", "NATURALIDADE",
-            "FILIAÇÃO", "NACIONAL", "DATA", "LOCAL", "NASCIMENTO", "CAT",
-            "ADMINISTRAÇÃO", "CONDUÇÃO", "SECRETARIA", "DETRAN",
-            // CRLV
-            "RENAVAM", "CHASSI", "MARCA", "MODELO", "COMBUSTÍVEL",
-            "ESPÉCIE", "PROPRIETÁRIO", "MUNICIPIO", "MUNICÍPIO",
-            "EXERCÍCIO", "LICENCIAMENTO", "CRLV"
-        )
-        val palavras = up.trim().split(Regex("\\s+"))
-        return palavras.size <= 5 && labelKeywords.any { up.contains(it) }
-    }
-
-    private fun extrairNomeFallBack(linhas: List<String>): String?
-    {
-        val ignorar = setOf(
-            "REPÚBLICA", "FEDERATIVA", "BRASIL", "HABILITAÇÃO", "DETRAN",
-            "MINISTÉRIO", "INFRAESTRUTURA", "SECRETARIA", "SENATRAN",
-            "DENATRAN", "CARTEIRA", "NACIONAL", "DRIVER", "LICENSE",
-            "PERMISO", "CONDUCCIÓN", "BRASILEIRO", "BRASILEIRA"
-        )
-        return linhas.firstOrNull { linha ->
-            val up = linha.uppercase()
-            up == linha &&
-                    linha.split(" ").size >= 2 &&
-                    linha.length > 6 &&
-                    linha.none { it.isDigit() } &&
-                    ignorar.none { up.contains(it) }
-        }
-    }
-
-    private fun String.formatarCpf(): String
-    {
-        val digits = replace(Regex("""\D"""), "")
-        return if (digits.length == 11)
-            "${digits.substring(0, 3)}.${digits.substring(3, 6)}.${
-                digits.substring(6, 9)
-            }-${digits.substring(9)}"
-        else this
     }
 }
