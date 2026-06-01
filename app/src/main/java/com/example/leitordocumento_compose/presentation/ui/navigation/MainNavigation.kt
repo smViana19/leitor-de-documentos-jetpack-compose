@@ -154,6 +154,7 @@ fun MainNavigation(inicioNavegacao: String) {
                 HistoricoScreen(navController = navController)
             }
 
+
         }
 
     })

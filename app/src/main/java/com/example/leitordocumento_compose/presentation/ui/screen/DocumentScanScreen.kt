@@ -2,6 +2,10 @@ package com.example.documentscan
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedContent
@@ -16,6 +20,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -65,9 +71,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.leitordocumento_compose.R
-import com.example.leitordocumento_compose.data.OcrResultado
 import com.example.leitordocumento_compose.data.local.repository.AppRepository
-import com.example.leitordocumento_compose.presentation.ui.components.OcrResultadoSheet
 import com.example.leitordocumento_compose.presentation.ui.navigation.navegarParaFormulario
 import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
 import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocumento
@@ -77,20 +81,30 @@ import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
 import com.example.leitordocumento_compose.presentation.ui.theme.IndicatorActive
 import com.example.leitordocumento_compose.presentation.ui.theme.TextPrimary
 import com.example.leitordocumento_compose.utils.OcrProcessador
+import com.example.leitordocumento_compose.utils.TtsManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.tooling.preview.Preview as ComposablePreview
 
 
-enum class DocumentType(val label: String) {
+enum class DocumentType(val label: String)
+{
     ID_CARD("ID CARD"),
     DOCUMENT("DOCUMENT"),
-    BOOK("BOOK"),
-    PASSPORT("PASSPORT")
+    CNH("CNH"),
+    RG("RG"),
+    CRLV("CRLV")
+}
+
+fun DocumentType.orientacaoRequerida(): Int = when (this)
+{
+    DocumentType.CRLV -> ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+    else -> ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
 }
 
 @Composable
-fun LockScreenOrientation(orientation: Int) {
+fun LockScreenOrientation(orientation: Int)
+{
     val context = LocalContext.current
     DisposableEffect(Unit) {
         val activity = context as? Activity ?: return@DisposableEffect onDispose {}
@@ -102,12 +116,26 @@ fun LockScreenOrientation(orientation: Int) {
     }
 }
 
+@Composable
+fun rememberTtsManager(): TtsManager
+{
+    val context = LocalContext.current
+    val ttsManager = remember { TtsManager(context) }
+    DisposableEffect(Unit) {
+        onDispose { ttsManager.shutdown() }
+    }
+    return ttsManager
+}
+
 
 @Composable
 fun DocumentScanScreen(
     navController: NavController,
     onHelp: () -> Unit = {},
-) {
+)
+{
+
+    val ttsManager = rememberTtsManager()
     LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE)
     var feedbackDocumento by remember { mutableStateOf(FeedbackDocumento()) }
 
@@ -116,8 +144,38 @@ fun DocumentScanScreen(
 
     var isProcessando by remember { mutableStateOf(false) }
     var framesPerfeitos by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        delay(300)
+        ttsManager.falar("Por favor, vire a tela do seu celular na horizontal")
+        delay(4000)
+        ttsManager.falar("Mantenha firme a câmera e posicione corretamente seu documento")
+    }
+
+
     val contexto = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val dispararVibracao = {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        {
+            val vibratorManager = contexto.getSystemService(Activity.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        }
+        else
+        {
+            @Suppress("DEPRECATION")
+            contexto.getSystemService(Activity.VIBRATOR_SERVICE) as Vibrator
+        }
+
+        // Uma batida firme e rápida (efeito de "click" de câmera)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(100) // 100 milissegundos para aparelhos antigos
+        }
+    }
 
     val previewView: PreviewView = remember {
         PreviewView(contexto).apply {
@@ -134,7 +192,8 @@ fun DocumentScanScreen(
             onResultado = { resultado ->
                 isProcessando = false
                 scope.launch {
-                    val id = when(val salvo = repository.salvarResultadoOcr(resultado)) {
+                    val id = when (val salvo = repository.salvarResultadoOcr(resultado))
+                    {
                         is AppRepository.Salvo.Cnh -> salvo.id
                         is AppRepository.Salvo.Placa -> salvo.id
                         is AppRepository.Salvo.Rg -> salvo.id
@@ -157,9 +216,11 @@ fun DocumentScanScreen(
         }
     }
     LaunchedEffect(framesPerfeitos) {
-        if (framesPerfeitos >= 1 && !isProcessando) {
-            delay(500)   // 500ms adicionais de segurança
-            if (framesPerfeitos >= 2 && !isProcessando) {
+        if (framesPerfeitos >= 1 && !isProcessando)
+        {
+            delay(500)
+            if (framesPerfeitos >= 2 && !isProcessando)
+            {
                 isProcessando = true
                 framesPerfeitos = 0
                 ocrProcessador.capturarEProcessar()
@@ -167,9 +228,15 @@ fun DocumentScanScreen(
         }
     }
 
+    LaunchedEffect(feedbackDocumento.mensagemVoz) {
+        if (!isProcessando && feedbackDocumento.mensagemVoz.isNotEmpty())
+        {
+            ttsManager.falar(feedbackDocumento.mensagemVoz)
+        }
+    }
+
     var flashOn by remember { mutableStateOf(false) }
 
-    // Animação pulsante dos cantos
     val cornerPulse by rememberInfiniteTransition(label = "corner_pulse").animateFloat(
         initialValue = 0.85f,
         targetValue = 1f,
@@ -185,13 +252,11 @@ fun DocumentScanScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // 1. Câmera ocupando toda a tela
         AndroidView(
             factory = { previewView },
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. Overlay desenhado por cima da câmera
         ScanOverlay(
             modifier = Modifier.fillMaxSize(),
             cornerAlpha = cornerPulse,
@@ -205,35 +270,64 @@ fun DocumentScanScreen(
             onFlashToggle = { flashOn = ocrProcessador.ligarFlash(flashOn) }
         )
 
-        if (!isProcessando) {
+        if (!isProcessando)
+        {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
-                contentAlignment = Alignment.BottomEnd
+                    .padding(bottom = 36.dp),
+                contentAlignment = Alignment.BottomCenter
             ) {
-                FloatingActionButton(
-                    onClick = {
-                        if (!isProcessando) {
-                            isProcessando = true
-                            framesPerfeitos = 0
-                            ocrProcessador.capturarEProcessar()
-                        }
-                    },
-                    containerColor = AccentBlue,
-                    contentColor = Color.White,
-                    shape = CircleShape,
-                    modifier = Modifier.size(56.dp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_scanner),
-                        contentDescription = "Capturar manualmente"
+                    Text(
+                        text = "Toque para capturar",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .background(Color(0x66000000), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
                     )
+
+                    Box(
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .border(3.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+                        )
+                        FloatingActionButton(
+                            onClick = {
+                                if (!isProcessando)
+                                {
+                                    isProcessando = true
+                                    framesPerfeitos = 0
+                                    ttsManager.falar("Capturando documento")
+                                    dispararVibracao()
+                                    ocrProcessador.capturarEProcessar()
+                                }
+                            },
+                            containerColor = AccentBlue,
+                            contentColor = Color.White,
+                            shape = CircleShape,
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_scanner),
+                                contentDescription = "Capturar documento",
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
-
-        if (isProcessando) {
+        if (isProcessando)
+        {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -253,7 +347,8 @@ fun TopFloatingControls(
     onHelp: () -> Unit,
     flashOn: Boolean,
     onFlashToggle: () -> Unit
-) {
+)
+{
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -276,36 +371,37 @@ fun TopFloatingControls(
         }
 
         // Indicador de Auto Captura (Centro)
-        Row(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .background(Color(0x66000000), RoundedCornerShape(16.dp))
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            val pulse by rememberInfiniteTransition(label = "dot_pulse").animateFloat(
-                initialValue = 0.5f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(800),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "dot_alpha"
-            )
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .background(IndicatorActive.copy(alpha = pulse), CircleShape)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Auto detecção ativa",
-                color = IndicatorActive,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
+//        Row(
+//            modifier = Modifier
+//                .align(Alignment.Center)
+//                .background(Color(0x66000000), RoundedCornerShape(16.dp))
+//                .padding(horizontal = 16.dp, vertical = 8.dp),
+//            verticalAlignment = Alignment.CenterVertically,
+//            verticalAlignment = Alignment.CenterVertically,
+//            horizontalArrangement = Arrangement.Center
+//        ) {
+//            val pulse by rememberInfiniteTransition(label = "dot_pulse").animateFloat(
+//                initialValue = 0.5f,
+//                targetValue = 1f,
+//                animationSpec = infiniteRepeatable(
+//                    animation = tween(800),
+//                    repeatMode = RepeatMode.Reverse
+//                ),
+//                label = "dot_alpha"
+//            )
+//            Box(
+//                modifier = Modifier
+//                    .size(8.dp)
+//                    .background(IndicatorActive.copy(alpha = pulse), CircleShape)
+//            )
+//            Spacer(modifier = Modifier.width(8.dp))
+//            Text(
+//                text = "Auto detecção ativa",
+//                color = IndicatorActive,
+//                fontSize = 12.sp,
+//                fontWeight = FontWeight.SemiBold
+//            )
+//        }
 
         // Botões Flash e Ajuda (Direita)
         Row(
@@ -346,7 +442,8 @@ private fun ScanOverlay(
     modifier: Modifier = Modifier,
     cornerAlpha: Float,
     feedback: FeedbackDocumento = FeedbackDocumento()
-) {
+)
+{
     val corAnimada by animateColorAsState(
         targetValue = feedback.corOverlay,
         animationSpec = tween(400),
@@ -362,8 +459,8 @@ private fun ScanOverlay(
                 drawContent()
 
                 // Dimensões do retângulo guia no centro da tela
-                val guideWidth = size.width * 0.75f
-                val guideHeight = size.height * 0.65f
+                val guideWidth = size.width * .85f
+                val guideHeight = size.height * 0.9f
                 val topLeftX = (size.width - guideWidth) / 2
                 val topLeftY = (size.height - guideHeight) / 2
                 val guideTopLeft = Offset(topLeftX, topLeftY)
@@ -390,7 +487,8 @@ private fun ScanOverlay(
                     guideSize = guideSize
                 )
 
-                if (feedback.progresso > 0f) {
+                if (feedback.progresso > 0f)
+                {
                     drawBarraQualidade(
                         progresso = feedback.progresso,
                         cor = corAnimada
@@ -410,7 +508,8 @@ private fun ScanOverlay(
                 transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
                 label = "mensagem_feedback"
             ) { msg ->
-                if (msg.isNotEmpty()) {
+                if (msg.isNotEmpty())
+                {
                     Text(
                         text = msg,
                         color = Color.White,
@@ -429,8 +528,10 @@ private fun ScanOverlay(
 
 
 @Composable
-private fun EstadoIcone(estado: EstadoDocumento) {
-    val (emoji, cor) = when (estado) {
+private fun EstadoIcone(estado: EstadoDocumento)
+{
+    val (emoji, cor) = when (estado)
+    {
         EstadoDocumento.NENHUM -> "" to Color(0xFF8A9BB5)
         EstadoDocumento.DETECTANDO -> "" to Color(0xFF8A9BB5)
         EstadoDocumento.ALINHANDO -> "" to Color(0xFF4A90D9)
@@ -448,7 +549,8 @@ fun DrawScope.drawScanCornersCentered(
     cornerRadius: Float,
     guideTopLeft: Offset,
     guideSize: Size
-) {
+)
+{
     val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
 
     val left = guideTopLeft.x
@@ -560,7 +662,8 @@ fun DrawScope.drawScanCornersCentered(
 
 @ComposablePreview(showBackground = true, backgroundColor = 0xFF0A1628)
 @Composable
-private fun DocumentScanScreenPreview() {
+private fun DocumentScanScreenPreview()
+{
     val navController = rememberNavController()
     AppTema {
         DocumentScanScreen(navController)
@@ -568,7 +671,8 @@ private fun DocumentScanScreenPreview() {
 }
 
 
-fun DrawScope.drawBarraQualidade(progresso: Float, cor: Color) {
+fun DrawScope.drawBarraQualidade(progresso: Float, cor: Color)
+{
     val altBarra = 6.dp.toPx()
     val y = size.height - altBarra
     drawRect(color = Color(0x33FFFFFF), topLeft = Offset(0f, y), size = Size(size.width, altBarra))

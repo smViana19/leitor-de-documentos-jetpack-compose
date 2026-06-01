@@ -58,10 +58,6 @@ fun FormularioRgScreen(
     var rg by remember { mutableStateOf(dados?.rg ?: "") }
     var cpf by remember { mutableStateOf(dados?.cpf ?: "") }
     var dataNasc by remember { mutableStateOf(dados?.dataNascimento ?: "") }
-    var naturalidade by remember { mutableStateOf(dados?.naturalidade ?: "") }
-    var nomeMae by remember { mutableStateOf(dados?.nomeMae ?: "") }
-    var nomePai by remember { mutableStateOf(dados?.nomePai ?: "") }
-    var dataEmissao by remember { mutableStateOf(dados?.dataEmissao ?: "") }
 
     FormularioScaffold(
         titulo = "RG detectado",
@@ -72,9 +68,6 @@ fun FormularioRgScreen(
                 DadosRG(
                     nome = nome.blankToNull(), rg = rg.blankToNull(),
                     cpf = cpf.blankToNull(), dataNascimento = dataNasc.blankToNull(),
-                    naturalidade = naturalidade.blankToNull(),
-                    nomeMae = nomeMae.blankToNull(), nomePai = nomePai.blankToNull(),
-                    dataEmissao = dataEmissao.blankToNull(),
                     rawText = dados?.rawText ?: ""
                 )
             )
@@ -89,19 +82,6 @@ fun FormularioRgScreen(
         SecaoCard("Dados pessoais") {
             Campo(
                 "Data de nascimento", dataNasc, { dataNasc = it },
-                kb = KeyboardType.Number, hint = "DD/MM/AAAA"
-            )
-            Campo(
-                "Naturalidade", naturalidade, { naturalidade = it },
-                cap = KeyboardCapitalization.Words
-            )
-            Campo("Nome da mãe", nomeMae, { nomeMae = it }, cap = KeyboardCapitalization.Words)
-            Campo("Nome do pai", nomePai, { nomePai = it }, cap = KeyboardCapitalization.Words)
-        }
-
-        SecaoCard("Emissão") {
-            Campo(
-                "Data de emissão", dataEmissao, { dataEmissao = it },
                 kb = KeyboardType.Number, hint = "DD/MM/AAAA"
             )
         }

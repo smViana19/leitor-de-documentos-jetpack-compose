@@ -95,14 +95,7 @@ fun FormularioCnhScreen(
     var cpf             by remember(dados) { mutableStateOf(dados?.cpf ?: "") }
     var rg              by remember(dados) { mutableStateOf(dados?.rg ?: "") }
     var orgaoEmissor    by remember(dados) { mutableStateOf(dados?.orgaoEmissor ?: "") }
-    var registro        by remember(dados) { mutableStateOf(dados?.numeroRegistro ?: "") }
-    var categoria       by remember(dados) { mutableStateOf(dados?.categoria ?: "") }
-    var primeiraHab     by remember(dados) { mutableStateOf(dados?.primeiraHabilitacao ?: "") }
-    var dataEmissao     by remember(dados) { mutableStateOf(dados?.dataEmissao ?: "") }
-    var dataValidade    by remember(dados) { mutableStateOf(dados?.dataValidade ?: "") }
     var dataNascimento  by remember(dados) { mutableStateOf(dados?.dataNascimento ?: "") }
-    var localNascimento by remember(dados) { mutableStateOf(dados?.localNascimento ?: "") }
-    var filiacao        by remember(dados) { mutableStateOf(dados?.filiacao ?: "") }
 
     FormularioScaffold(
         titulo = "CNH detectada",
@@ -113,13 +106,7 @@ fun FormularioCnhScreen(
                 DadosCNH(
                     nome = nome.blankToNull(), cpf = cpf.blankToNull(),
                     rg = rg.blankToNull(), orgaoEmissor = orgaoEmissor.blankToNull(),
-                    numeroRegistro = registro.blankToNull(), categoria = categoria.blankToNull(),
-                    primeiraHabilitacao = primeiraHab.blankToNull(),
-                    dataEmissao = dataEmissao.blankToNull(),
-                    dataValidade = dataValidade.blankToNull(),
                     dataNascimento = dataNascimento.blankToNull(),
-                    localNascimento = localNascimento.blankToNull(),
-                    filiacao = filiacao.blankToNull(),
                     rawText = dados?.rawText ?: ""
                 )
             )
@@ -130,28 +117,8 @@ fun FormularioCnhScreen(
             Campo("CPF", cpf, { cpf = it }, kb = KeyboardType.Number, hint = "000.000.000-00")
             Campo("RG / Doc. identidade", rg, { rg = it })
             Campo("Órgão emissor", orgaoEmissor, { orgaoEmissor = it }, cap = KeyboardCapitalization.Characters)
-        }
-
-        SecaoCard("Habilitação") {
-            Campo("Nº de registro", registro, { registro = it }, kb = KeyboardType.Number)
-            Campo("Categoria", categoria, { categoria = it.uppercase() },
-                cap = KeyboardCapitalization.Characters, hint = "Ex: B, AB")
-            Campo("Primeira habilitação", primeiraHab, { primeiraHab = it },
-                kb = KeyboardType.Number, hint = "DD/MM/AAAA")
-            Campo("Data de emissão", dataEmissao, { dataEmissao = it },
-                kb = KeyboardType.Number, hint = "DD/MM/AAAA")
-            Campo("Validade", dataValidade, { dataValidade = it },
-                kb = KeyboardType.Number, hint = "DD/MM/AAAA",
-                alerta = validadeProxima(dataValidade),
-                msgAlerta = "Verifique — validade próxima ou vencida")
-        }
-
-        SecaoCard("Nascimento e filiação") {
             Campo("Data de nascimento", dataNascimento, { dataNascimento = it },
                 kb = KeyboardType.Number, hint = "DD/MM/AAAA")
-            Campo("Local de nascimento", localNascimento, { localNascimento = it },
-                cap = KeyboardCapitalization.Words)
-            Campo("Filiação", filiacao, { filiacao = it }, cap = KeyboardCapitalization.Words)
         }
     }
 }

@@ -56,20 +56,19 @@ import com.example.leitordocumento_compose.R
 import com.example.leitordocumento_compose.data.local.repository.AppRepository
 import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
 
-// ─── Modelos de dados (adapte aos seus Room entities) ───────────────────────
 
 data class DocumentoHistorico(
     val id: Long,
-    val tipo: String,          // ex: "CNH", "RG", "Passaporte"
-    val descricao: String,     // ex: "Carteira de Motorista"
-    val dataScaneado: String,  // ex: "28/05/2026"
+    val tipo: String,
+    val descricao: String,
+    val dataScaneado: String,
     val iconRes: Int,
 )
 
 data class PlacaHistorico(
     val id: Long,
-    val placa: String,         // ex: "ABC-1D23"
-    val modelo: String,        // ex: "Toyota Corolla"
+    val placa: String,
+    val modelo: String,
     val dataScaneado: String,
     val iconRes: Int,
 )
@@ -83,11 +82,9 @@ fun HistoricoScreen(
 
     val repository = remember { AppRepository.fromAppContainer() }
 
-    // 2. Estados para armazenar as listas finais que a UI vai ler
     var documentos by remember { mutableStateOf<List<DocumentoHistorico>>(emptyList()) }
     var placas by remember { mutableStateOf<List<PlacaHistorico>>(emptyList()) }
 
-    // 3. Coletamos os dados do banco (assumindo que o DAO retorna Flow)
     val cnhsEntities by repository.listarCnhs().collectAsState(initial = emptyList())
     val rgsEntities by repository.listarRgs().collectAsState(initial = emptyList())
     val crlvsEntities by repository.listarCrlvs().collectAsState(initial = emptyList())
@@ -102,7 +99,7 @@ fun HistoricoScreen(
                 tipo = "CNH",
                 descricao = it.nome ?: "Nao informado",
                 dataScaneado = it.dataEmissao ?: "Data não informada",
-                iconRes = R.drawable.ic_informacao_24 // Adapte para o ícone correto de doc
+                iconRes = R.drawable.ic_scanner
             )
         })
 
@@ -112,7 +109,7 @@ fun HistoricoScreen(
                 tipo = "RG",
                 descricao = it.nome ?: "Nao informado",
                 dataScaneado = it.dataEmissao ?: "Data não informada",
-                iconRes = R.drawable.ic_informacao_24
+                iconRes = R.drawable.ic_scanner
             )
         })
 
@@ -122,7 +119,7 @@ fun HistoricoScreen(
                 tipo = "CRLV",
                 descricao = "${it.marca} ${it.modelo}",
                 dataScaneado = "Registrado", // Adapte se você tiver um campo de data na Entity
-                iconRes = R.drawable.ic_informacao_24
+                iconRes = R.drawable.ic_scanner
             )
         })
 
@@ -136,9 +133,9 @@ fun HistoricoScreen(
             PlacaHistorico(
                 id = it.id,
                 placa = it.placa,
-                modelo = "Veículo Escaneado", // Adapte se sua entidade de Placa tiver mais dados
+                modelo = "Veículo Escaneado",
                 dataScaneado = "Registrado",
-                iconRes = R.drawable.ic_informacao_24 // Adapte para o ícone de carro/placa
+                iconRes = R.drawable.ic_carro_24
             )
         }.sortedByDescending { it.id }
     }
@@ -152,12 +149,10 @@ fun HistoricoScreen(
             .background(MaterialTheme.colorScheme.background)
             .systemBarsPadding()
     ) {
-        // ── Cabeçalho ──────────────────────────────────────────────────────
         HistoricoCabecalho(navController = navController)
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ── Badge de segurança ─────────────────────────────────────────────
         BadgeSeguranca(
             modifier = Modifier
                 .fillMaxWidth()
@@ -166,7 +161,6 @@ fun HistoricoScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // ── Abas ──────────────────────────────────────────────────────────
         TabRow(
             selectedTabIndex = selectedTab,
             modifier = Modifier
@@ -207,7 +201,6 @@ fun HistoricoScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // ── Conteúdo das abas ─────────────────────────────────────────────
         AnimatedContent(
             targetState = selectedTab,
             transitionSpec = {
@@ -222,8 +215,6 @@ fun HistoricoScreen(
         }
     }
 }
-
-// ─── Cabeçalho ───────────────────────────────────────────────────────────────
 
 @Composable
 private fun HistoricoCabecalho(navController: NavController) {
@@ -254,8 +245,6 @@ private fun HistoricoCabecalho(navController: NavController) {
     }
 }
 
-// ─── Badge de segurança ───────────────────────────────────────────────────────
-
 @Composable
 fun BadgeSeguranca(modifier: Modifier = Modifier) {
     Row(
@@ -279,8 +268,6 @@ fun BadgeSeguranca(modifier: Modifier = Modifier) {
         )
     }
 }
-
-// ─── Lista de Documentos ──────────────────────────────────────────────────────
 
 @Composable
 private fun ListaDocumentos(
@@ -310,8 +297,6 @@ private fun ListaDocumentos(
     }
 }
 
-// ─── Lista de Placas ──────────────────────────────────────────────────────────
-
 @Composable
 private fun ListaPlacas(
     placas: List<PlacaHistorico>,
@@ -339,8 +324,6 @@ private fun ListaPlacas(
         }
     }
 }
-
-// ─── Card Documento ───────────────────────────────────────────────────────────
 
 @Composable
 fun CardDocumento(

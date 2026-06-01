@@ -82,6 +82,8 @@ object PlacaOcrProcessador {
         return null
     }
 
+
+
     /**
      * Normaliza o texto do OCR: remove espaços, converte para maiúsculas,
      * corrige erros comuns de OCR (0↔O, 1↔I, 8↔B etc.) nas posições certas.

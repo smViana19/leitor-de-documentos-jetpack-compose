@@ -2,7 +2,13 @@ package com.example.leitordocumento_compose.presentation.ui.screen
 
 import PlacaOcrProcessador
 import TipoVeiculo
+import android.app.Activity
 import android.content.pm.ActivityInfo
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.animateColorAsState
@@ -16,10 +22,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +45,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -44,6 +56,8 @@ import com.example.documentscan.LockScreenOrientation
 import com.example.documentscan.TopFloatingControls
 import com.example.documentscan.drawBarraQualidade
 import com.example.documentscan.drawScanCornersCentered
+import com.example.documentscan.rememberTtsManager
+import com.example.leitordocumento_compose.R
 import com.example.leitordocumento_compose.presentation.ui.components.OcrResultadoSheet
 import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
 import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocumento
@@ -51,6 +65,7 @@ import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
 import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlueBright
 import com.example.leitordocumento_compose.utils.OcrProcessador
 import com.example.leitordocumento_compose.data.OcrResultado
+import kotlinx.coroutines.delay
 
 @Composable
 fun PlacaScanScreen(
@@ -59,6 +74,8 @@ fun PlacaScanScreen(
     onHelp: () -> Unit = {}
 ) {
 
+    val ttsManager = rememberTtsManager()
+
     if (tipoVeiculo == TipoVeiculo.CARRO)
     {
         LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE)
@@ -66,6 +83,17 @@ fun PlacaScanScreen(
     else
     {
         LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT)
+
+    }
+    LaunchedEffect(tipoVeiculo) {
+        if (tipoVeiculo == TipoVeiculo.CARRO) {
+            delay(400)
+            ttsManager.falar("Modo carro ativado. Vire o dispositivo na horizontal.")
+        } else {
+            delay(400)
+
+            ttsManager.falar("Modo moto ativado. Mantenha o dispositivo na vertical")
+        }
     }
 
     var ocrResultado by remember { mutableStateOf<OcrResultado?>(null) }
@@ -75,6 +103,27 @@ fun PlacaScanScreen(
 
     val contexto = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val dispararVibracao = {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        {
+            val vibratorManager = contexto.getSystemService(Activity.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        }
+        else
+        {
+            @Suppress("DEPRECATION")
+            contexto.getSystemService(Activity.VIBRATOR_SERVICE) as Vibrator
+        }
+
+        // Uma batida firme e rápida (efeito de "click" de câmera)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(100) // 100 milissegundos para aparelhos antigos
+        }
+    }
 
     val previewView: PreviewView = remember {
         PreviewView(contexto).apply {
@@ -92,7 +141,6 @@ fun PlacaScanScreen(
     )
 
 
-    // Reutiliza o seu OcrProcessador existente
     val ocrProcessador = remember {
         OcrProcessador(
             contexto = contexto,
@@ -103,7 +151,6 @@ fun PlacaScanScreen(
                 if (resultado is OcrResultado.Placa) {
                     ocrResultado = resultado
                 } else {
-                    // OCR não encontrou placa válida — texto não bateu com nenhum regex
                     Toast.makeText(contexto, "Placa não reconhecida. Tente novamente.", Toast.LENGTH_SHORT).show()
                 }
             },
@@ -149,12 +196,44 @@ fun PlacaScanScreen(
             tipoVeiculo = tipoVeiculo
         )
 
-        TopFloatingControls(  // reutiliza o seu componente existente
+        TopFloatingControls(
             onClose = { navController.navigateUp() },
             onHelp = onHelp,
             flashOn = false,
             onFlashToggle = {}
         )
+        if (!isProcessando)
+        {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                FloatingActionButton(
+                    onClick = {
+                        if (!isProcessando)
+                        {
+                            isProcessando = true
+                            framesPerfeitos = 0
+                            ttsManager.falar("Capturando placa")
+                            dispararVibracao()
+                            ocrProcessador.capturarEProcessar()
+                        }
+                    },
+                    containerColor = AccentBlue,
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_scanner),
+                        contentDescription = "Capturar manualmente"
+                    )
+                }
+            }
+        }
+
 
         if (isProcessando) {
             Box(

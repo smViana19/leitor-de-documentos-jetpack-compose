@@ -67,11 +67,6 @@ fun HomeScreen(navController: NavController)
     val titulosAbas = listOf("Documentos", "Placas")
 
     val listaDocumentos = listOf(
-        TipoDocumento("RG",
-            "Escaneie frente e verso do seu Documento de Identidade.",
-            R.drawable.ic_scanner,
-            Screens.TELA_SCANNER.name,
-            CategoriaScanner.DOCUMENTO),
         TipoDocumento("CNH",
             "Escaneie sua Carteira Nacional de Habilitação.",
             R.drawable.ic_carro_24,
@@ -89,7 +84,7 @@ fun HomeScreen(navController: NavController)
             CategoriaScanner.PLACA),
         TipoDocumento("Placa de Moto",
             "Escaneie a placa da motocicleta.",
-            R.drawable.ic_carro_24,
+            R.drawable.ic_moto,
             "${Screens.TELA_SCANNER_PLACA.name}/MOTO",
             CategoriaScanner.PLACA)
     )
@@ -137,7 +132,6 @@ fun HomeScreen(navController: NavController)
             }
         }
 
-        // 6. Iterando sobre a lista filtrada
         documentosFiltrados.forEach { documento ->
             CardDocumento(
                 documento = documento,
@@ -146,7 +140,6 @@ fun HomeScreen(navController: NavController)
             Spacer(modifier = Modifier.height(16.dp))
         }
         Spacer(modifier = Modifier.height(24.dp))
-        HistoricoDigitalizacoes(listaTeste)
     }
 }
 

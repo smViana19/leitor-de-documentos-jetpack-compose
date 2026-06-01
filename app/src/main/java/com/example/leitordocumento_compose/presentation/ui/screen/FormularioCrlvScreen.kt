@@ -101,14 +101,11 @@ fun FormularioCrlvScreen(
     var placa by remember(dados) { mutableStateOf(dados?.placa ?: "") }
     var renavam by remember(dados) { mutableStateOf(dados?.renavam ?: "") }
     var chassi by remember(dados) { mutableStateOf(dados?.chassi ?: "") }
-    var proprietario by remember(dados) { mutableStateOf(dados?.proprietario ?: "") }
     var marca by remember(dados) { mutableStateOf(dados?.marca ?: "") }
     var modelo by remember(dados) { mutableStateOf(dados?.modelo ?: "") }
     var anoFab by remember(dados) { mutableStateOf(dados?.anoFabricacao ?: "") }
     var anoMod by remember(dados) { mutableStateOf(dados?.anoModelo ?: "") }
     var cor by remember(dados) { mutableStateOf(dados?.cor ?: "") }
-    var municipio by remember(dados) { mutableStateOf(dados?.municipio ?: "") }
-    var validade by remember(dados) { mutableStateOf(dados?.validade ?: "") }
 
     FormularioScaffold(
         titulo = "CRLV detectado",
@@ -118,11 +115,11 @@ fun FormularioCrlvScreen(
             onConfirm(
                 DadosCRLV(
                     placa = placa.blankToNull(), renavam = renavam.blankToNull(),
-                    chassi = chassi.blankToNull(), proprietario = proprietario.blankToNull(),
+                    chassi = chassi.blankToNull(),
                     marca = marca.blankToNull(), modelo = modelo.blankToNull(),
                     anoFabricacao = anoFab.blankToNull(), anoModelo = anoMod.blankToNull(),
-                    cor = cor.blankToNull(), municipio = municipio.blankToNull(),
-                    validade = validade.blankToNull(), rawText = dados?.rawText ?: ""
+                    cor = cor.blankToNull(),
+                    rawText = dados?.rawText ?: ""
                 )
             )
         }
@@ -152,21 +149,6 @@ fun FormularioCrlvScreen(
             )
             Campo("Ano modelo", anoMod, { anoMod = it }, kb = KeyboardType.Number, hint = "AAAA")
             Campo("Cor", cor, { cor = it }, cap = KeyboardCapitalization.Words)
-            Campo("Município", municipio, { municipio = it }, cap = KeyboardCapitalization.Words)
-        }
-
-        SecaoCard("Proprietário e licenciamento") {
-            Campo(
-                "Proprietário",
-                proprietario,
-                { proprietario = it },
-                cap = KeyboardCapitalization.Words
-            )
-            Campo(
-                "Validade", validade, { validade = it },
-                kb = KeyboardType.Number, hint = "DD/MM/AAAA",
-                msgAlerta = "Verifique — licenciamento vencido ou próximo"
-            )
         }
     }
 }
