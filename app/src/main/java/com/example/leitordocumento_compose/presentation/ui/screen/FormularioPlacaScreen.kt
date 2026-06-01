@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +46,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.leitordocumento_compose.R
+import com.example.leitordocumento_compose.data.local.repository.AppRepository
 import com.example.leitordocumento_compose.presentation.ui.components.Campo
 import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
 
@@ -53,7 +56,28 @@ fun FormularioPlacaScreen(
     dados: ResultadoPlaca?,
     onReler: () -> Unit
 ) {
-    var placa by remember { mutableStateOf(dados?.placa ?: "") }
+    val repository = remember { AppRepository.fromAppContainer() }
+    var dados by remember { mutableStateOf<ResultadoPlaca?>(null) }
+
+    LaunchedEffect(id) {
+        val entity = repository.buscarPlaca(id)
+        dados = entity?.let {
+            ResultadoPlaca(
+                placa = it.placa,
+                placaNormalizada = it.placaNormalizada
+            )
+        }
+    }
+
+    if(dados == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    var placa by remember(dados) { mutableStateOf(dados?.placa ?: "") }
+
 
     FormularioScaffold(
         titulo = "Placa detectada",

@@ -2,8 +2,8 @@ import android.util.Log
 
 data class ResultadoPlaca(
     val placa: String,
-    val tipo: TipoVeiculo,
-    val padrao: PadraoPlaca,
+//    val tipo: TipoVeiculo,
+//    val padrao: PadraoPlaca,
     val placaNormalizada: String
 )
 
@@ -59,8 +59,8 @@ object PlacaOcrProcessador {
             val tipo = tipoVeiculoHint ?: resolverTipoMercosul(placa)
             return ResultadoPlaca(
                 placa = placa,
-                tipo = tipo,
-                padrao = PadraoPlaca.MERCOSUL,
+//                tipo = tipo,
+//                padrao = PadraoPlaca.MERCOSUL,
                 placaNormalizada = formatarPlaca(placa, PadraoPlaca.MERCOSUL)
             )
         }
@@ -72,8 +72,8 @@ object PlacaOcrProcessador {
             val tipo = tipoVeiculoHint ?: TipoVeiculo.CARRO // antigo não tem distinção clara
             return ResultadoPlaca(
                 placa = placa,
-                tipo = tipo,
-                padrao = PadraoPlaca.BRASIL_ANTIGO,
+//                tipo = tipo,
+//                padrao = PadraoPlaca.BRASIL_ANTIGO,
                 placaNormalizada = formatarPlaca(placa, PadraoPlaca.BRASIL_ANTIGO)
             )
         }

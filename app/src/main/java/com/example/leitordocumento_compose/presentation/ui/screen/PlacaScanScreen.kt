@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,7 +66,10 @@ import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
 import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlueBright
 import com.example.leitordocumento_compose.utils.OcrProcessador
 import com.example.leitordocumento_compose.data.OcrResultado
+import com.example.leitordocumento_compose.data.local.repository.AppRepository
+import com.example.leitordocumento_compose.presentation.ui.navigation.navegarParaFormulario
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlacaScanScreen(
@@ -100,6 +104,9 @@ fun PlacaScanScreen(
     var isProcessando by remember { mutableStateOf(false) }
     var framesPerfeitos by remember { mutableIntStateOf(0) }
     var feedbackDocumento by remember { mutableStateOf(FeedbackDocumento()) }
+
+    val scope = rememberCoroutineScope()
+    val repository = remember { AppRepository.fromAppContainer() }
 
     val contexto = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -148,15 +155,20 @@ fun PlacaScanScreen(
             tipoDocumentoSelecionado = { DocumentType.DOCUMENT },
             onResultado = { resultado ->
                 isProcessando = false
-                if (resultado is OcrResultado.Placa) {
-                    ocrResultado = resultado
-                } else {
-                    Toast.makeText(contexto, "Placa não reconhecida. Tente novamente.", Toast.LENGTH_SHORT).show()
+                scope.launch {
+                    val id = when (val salvo = repository.salvarResultadoOcr(resultado)) {
+                        is AppRepository.Salvo.Cnh -> salvo.id
+                        is AppRepository.Salvo.Placa -> salvo.id
+                        is AppRepository.Salvo.Rg -> salvo.id
+                        is AppRepository.Salvo.Crlv -> salvo.id
+                    }
+                    navController.navegarParaFormulario(resultado, id)
+
                 }
             },
             onError = { error ->
                 isProcessando = false
-                Toast.makeText(contexto, "Erro: $error", Toast.LENGTH_LONG).show()
+                Toast.makeText(contexto, "Erro ao processar: $error", Toast.LENGTH_LONG).show()
             },
             processadorCustom = { textoOcr ->
                 val placa = PlacaOcrProcessador.processarPlaca(
@@ -247,16 +259,16 @@ fun PlacaScanScreen(
         }
 
         // Sheet de resultado de placa
-        ocrResultado?.let { resultado ->
-            OcrResultadoSheet(
-                resultado = resultado,
-                onDismiss = { ocrResultado = null },
-                onConfirm = { confirmedResult ->
-                    ocrResultado = null
-
-                }
-            )
-        }
+//        ocrResultado?.let { resultado ->
+//            OcrResultadoSheet(
+//                resultado = resultado,
+//                onDismiss = { ocrResultado = null },
+//                onConfirm = { confirmedResult ->
+//                    ocrResultado = null
+//
+//                }
+//            )
+//        }
     }
 }
 
