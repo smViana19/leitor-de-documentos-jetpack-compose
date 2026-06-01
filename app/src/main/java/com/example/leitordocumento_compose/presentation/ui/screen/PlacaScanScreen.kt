@@ -168,7 +168,6 @@ fun PlacaScanScreen(
             },
             onError = { error ->
                 isProcessando = false
-                Toast.makeText(contexto, "Erro ao processar: $error", Toast.LENGTH_LONG).show()
             },
             processadorCustom = { textoOcr ->
                 val placa = PlacaOcrProcessador.processarPlaca(
