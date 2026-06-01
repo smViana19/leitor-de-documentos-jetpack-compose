@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.util.Log
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
@@ -16,56 +17,129 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.example.documentscan.DocumentType
-import com.example.leitordocumento_compose.ui.states.FeedbackDocumento
+import com.example.leitordocumento_compose.data.DadosCNH
+import com.example.leitordocumento_compose.data.DadosCRLV
+import com.example.leitordocumento_compose.data.DadosRG
+import com.example.leitordocumento_compose.data.OcrResultado
+import com.example.leitordocumento_compose.presentation.ui.states.EstadoDocumento
+import com.example.leitordocumento_compose.presentation.ui.states.FeedbackDocumento
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.collections.emptyList
+
+
+/**
+ * OcrProcessador v2 — captura múltipla com seleção do melhor resultado.
+ *
+ * Melhorias principais:
+ *  1. Captura N frames em sequência rápida e escolhe o que retornou mais campos preenchidos
+ *  2. Merge inteligente: combina campos de múltiplas capturas (cobre leituras parciais)
+ *  3. Retry automático em caso de resultado insatisfatório
+ *  4. Fila de processamento para não bloquear a câmera
+ */
 
 class OcrProcessador(
     private val contexto: Context,
     private val lifecycleOwner: LifecycleOwner,
     private val tipoDocumentoSelecionado: () -> DocumentType,
     private val onResultado: (OcrResultado) -> Unit,
-    private val onError: (String) -> Unit
-) {
+    private val onProgresso: ((Float) -> Unit)? = null,
+    private val onError: (String) -> Unit,
+    private val processadorCustom: ((String) -> OcrResultado)? = null,
+    private val onFrameTexto: ((String) -> Boolean)? = null
+
+)
+{
+
+    private val SCORE_EARLY_EXIT = 14
 
     private val reconhecedorTexto = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private var imagemCaptura: ImageCapture? = null
 
     private var analisadorFrame: AnalisadorFrame? = null
+
+    private var camera: Camera? = null
+    private var cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    private var cameraProvider: ProcessCameraProvider? = null
+
+    private val TOTAL_CAPTURAS = 3
+    private val DELAY_ENTRE_CAPTURAS_MS = 300L
+    private var capturasEmAndamento = false
+
     fun bindCamera(
-        previewView: PreviewView, onFeedback: (FeedbackDocumento) -> Unit = {}   // ← novo parâmetro
-    ) {
+        previewView: PreviewView,
+        onFeedback: (FeedbackDocumento) -> Unit = {}
+    )
+    {
         val future = ProcessCameraProvider.getInstance(contexto)
         future.addListener({
             val provider = future.get()
+            cameraProvider = provider
+
             val preview = Preview.Builder().build().also {
                 it.surfaceProvider = previewView.surfaceProvider
             }
             imagemCaptura = ImageCapture.Builder()
-                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .build()
+
             val analisador = AnalisadorFrame(
                 tipoDocumento = tipoDocumentoSelecionado,
                 onFeedback = onFeedback
             )
+
             val analiseImagem = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
-                .also { it.setAnalyzer(executor, analisador) }
-            try {
+                .also { imageAnalysis ->
+                    if (onFrameTexto != null)
+                    {
+                        // Analisador leve de texto para placas
+                        imageAnalysis.setAnalyzer(executor, AnalisadorTextoFrame(
+                            reconhecedorTexto = reconhecedorTexto,
+                            onTexto = { texto ->
+                                val deveCapturar = onFrameTexto.invoke(texto)
+                                if (deveCapturar && !capturasEmAndamento)
+                                {
+                                    capturarEProcessar()
+                                }
+                                // Feedback visual simples baseado no texto
+                                val temPlaca = texto.length in 5..10
+                                onFeedback(
+                                    FeedbackDocumento(
+                                        estado = if (temPlaca) EstadoDocumento.PERFEITO else EstadoDocumento.DETECTANDO,
+                                        mensagem = if (temPlaca) "Placa detectada!" else "Procurando placa...",
+                                        progresso = if (temPlaca) 1f else 0f
+                                    )
+                                )
+                            }
+                        ))
+                    }
+                    else
+                    {
+                        imageAnalysis.setAnalyzer(executor, AnalisadorFrame(
+                            tipoDocumento = tipoDocumentoSelecionado,
+                            onFeedback = onFeedback
+                        ))
+                    }
+                }
+            try
+            {
                 provider.unbindAll()
-                provider.bindToLifecycle(
+                camera = provider.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
                     imagemCaptura,
                     analiseImagem
                 )
-            } catch (e: Exception) {
+            }
+            catch (e: Exception)
+            {
                 onError("Erro ao iniciar câmera: ${e.message}")
             }
         }, ContextCompat.getMainExecutor(contexto))
@@ -73,61 +147,373 @@ class OcrProcessador(
 
     }
 
-    fun capturarEProcessar() {
+    fun ligarFlash(estadoAtual: Boolean): Boolean
+    {
+        val novoEstado = !estadoAtual
+        val hasFlash = camera?.cameraInfo?.hasFlashUnit() ?: false
+
+        if (hasFlash)
+        {
+            camera?.cameraControl?.enableTorch(novoEstado)
+        }
+        return if (hasFlash) novoEstado else false
+    }
+
+    fun capturarEProcessar()
+    {
+
+        if (capturasEmAndamento) return
+        capturasEmAndamento = true
         val captura = imagemCaptura ?: run {
             onError("Câmera não inicializada")
+            capturasEmAndamento = false
+            return
+        }
+        capturarMultiplos(captura, TOTAL_CAPTURAS, emptyList())
+    }
+
+    private fun capturarMultiplos(
+        captura: ImageCapture,
+        restantes: Int,
+        bitmapsAcumulados: List<Bitmap>
+    )
+    {
+        if (restantes == 0)
+        {
+            processarMultiplosBitmaps(bitmapsAcumulados)
             return
         }
 
-        captura.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
-            override fun onCaptureSuccess(proxy: ImageProxy) {
-                try {
+        val total = TOTAL_CAPTURAS
+        val feitos = total - restantes
+        onProgresso?.invoke(feitos.toFloat() / total)
+
+        captura.takePicture(executor, object : ImageCapture.OnImageCapturedCallback()
+        {
+            override fun onCaptureSuccess(proxy: ImageProxy)
+            {
+                try
+                {
                     val bitmap =
                         proxy.toBitmap().rotateTo(proxy.imageInfo.rotationDegrees.toFloat())
                     proxy.close()
-                    runOcr(bitmap)
-                } catch (e: Exception) {
+                    val novos = bitmapsAcumulados + bitmap
+
+                    if (novos.size >= 1 && restantes > 1)
+                    {
+                        processarFrameRapido(novos.last()) { score ->
+                            if (score >= SCORE_EARLY_EXIT)
+                            {
+                                // Score alto o suficiente — processa o que já temos
+                                processarMultiplosBitmaps(novos)
+                            }
+                            else
+                            {
+                                Thread.sleep(DELAY_ENTRE_CAPTURAS_MS)
+                                capturarMultiplos(captura, restantes - 1, novos)
+                            }
+                        }
+                    }
+                    else
+                    {
+                        capturarMultiplos(captura, 0, novos)
+                    }
+                }
+                catch (e: Exception)
+                {
                     proxy.close()
-                    onError("Erro ao processar imagem: ${e.message}")
+                    if (bitmapsAcumulados.isNotEmpty())
+                    {
+                        processarMultiplosBitmaps(bitmapsAcumulados)
+                    }
+                    else
+                    {
+                        capturasEmAndamento = false
+                        onError("Erro ao capturar: ${e.message}")
+                    }
                 }
             }
 
-            override fun onError(exception: ImageCaptureException) {
-                onError("Erro ao capturar imagem: ${exception.message}")
+            override fun onError(exception: ImageCaptureException)
+            {
+                if (bitmapsAcumulados.isNotEmpty())
+                {
+                    processarMultiplosBitmaps(bitmapsAcumulados)
+                }
+                else
+                {
+                    capturasEmAndamento = false
+                    onError("Erro ao capturar imagem: ${exception.message}")
+                }
             }
         })
-
     }
 
-    fun processarBitmapExterno(bitmap: Bitmap) = runOcr(bitmap)
-    private fun runOcr(bitmap: Bitmap) {
+    private fun processarFrameRapido(bitmap: Bitmap, onScore: (Int) -> Unit)
+    {
         val image = InputImage.fromBitmap(bitmap, 0)
         reconhecedorTexto.process(image)
             .addOnSuccessListener { mlText ->
-                Log.d("OCR_RAW", mlText.text)
-                val result =
-                    DocumentoOcrProcessador.processarDocumento(mlText, tipoDocumentoSelecionado())
-                onResultado(result)
+                val resultado = processadorCustom?.invoke(mlText.text)
+                    ?: DocumentoOcrProcessador.processarDocumento(
+                        mlText,
+                        tipoDocumentoSelecionado()
+                    )
+                onScore(pontuarResultado(resultado))
             }
-            .addOnFailureListener { e ->
-                onError("OCR falhou: ${e.message}")
-            }
+            .addOnFailureListener { onScore(0) }
     }
 
-    fun shutdown() {
+    private fun processarMultiplosBitmaps(bitmaps: List<Bitmap>)
+    {
+
+        val resultados = mutableListOf<OcrResultado>()
+        var processados = 0
+
+        bitmaps.forEachIndexed { index, bitmap ->
+            val image = InputImage.fromBitmap(bitmap, 0)
+            reconhecedorTexto.process(image)
+                .addOnSuccessListener { mlText ->
+                    Log.d("OCR_RAW", "Frame $index:\n${mlText.text}")
+                    val resultado = processadorCustom?.invoke(mlText.text)
+                        ?: DocumentoOcrProcessador.processarDocumento(mlText,
+                            tipoDocumentoSelecionado())
+
+                    synchronized(resultados) {
+                        resultados.add(resultado)
+                        processados++
+                        if (processados == bitmaps.size)
+                        {
+                            capturasEmAndamento = false
+                            val melhor = selecionarMelhorResultado(resultados)
+                            onResultado(melhor)
+                        }
+                    }
+                }
+                .addOnFailureListener { e ->
+                    synchronized(resultados) {
+                        processados++
+                        if (processados == bitmaps.size)
+                        {
+                            capturasEmAndamento = false
+                            if (resultados.isNotEmpty())
+                            {
+                                onResultado(selecionarMelhorResultado(resultados))
+                            }
+                            else
+                            {
+                                onError("OCR falhou em todos os frames: ${e.message}")
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    private fun selecionarMelhorResultado(resultados: List<OcrResultado>): OcrResultado
+    {
+        if (resultados.isEmpty()) return OcrResultado.Desconhecido("")
+        if (resultados.size == 1) return resultados[0]
+
+        val cnhs = resultados.filterIsInstance<OcrResultado.Cnh>()
+        val rgs = resultados.filterIsInstance<OcrResultado.Rg>()
+        val crlvs = resultados.filterIsInstance<OcrResultado.Crlv>() // <- Novo
+        val placas = resultados.filterIsInstance<OcrResultado.Placa>()
+
+        return when
+        {
+            cnhs.size >= resultados.size / 2 -> mergeCnh(cnhs)
+            rgs.size >= resultados.size / 2 -> mergeRg(rgs)
+            crlvs.size >= resultados.size / 2 -> mergeCrlv(crlvs) // <- Novo
+            placas.size >= resultados.size / 2 -> mergePlaca(placas) // ← novo
+            else -> resultados.maxByOrNull { pontuarResultado(it) } ?: resultados[0]
+            //      ↑ antes estava um bloco vazio {} que retornava Unit
+        }
+    }
+
+    private fun mergePlaca(placas: List<OcrResultado.Placa>): OcrResultado.Placa
+    {
+        // Retorna a placa que apareceu com mais frequência entre os frames
+        return placas
+            .groupBy { it.dadosPlaca }
+            .maxByOrNull { it.value.size }
+            ?.value
+            ?.first()
+            ?: placas[0]
+    }
+
+
+    private fun mergeCnh(cnhs: List<OcrResultado.Cnh>): OcrResultado.Cnh
+    {
+        // Ordena por pontuação descendente — o melhor é a base
+        val ordenados = cnhs.sortedByDescending { pontuarCnh(it.dadosCNH) }
+        var base = ordenados[0].dadosCNH
+
+        for (i in 1 until ordenados.size)
+        {
+            val outro = ordenados[i].dadosCNH
+            base = base.copy(
+                nome = base.nome ?: outro.nome,
+                cpf = base.cpf ?: outro.cpf,
+                rg = base.rg ?: outro.rg,
+                dataNascimento = base.dataNascimento ?: outro.dataNascimento,
+                localNascimento = base.localNascimento ?: outro.localNascimento,
+                numeroRegistro = base.numeroRegistro ?: outro.numeroRegistro,
+                primeiraHabilitacao = base.primeiraHabilitacao ?: outro.primeiraHabilitacao,
+                dataEmissao = base.dataEmissao ?: outro.dataEmissao,
+                dataValidade = base.dataValidade ?: outro.dataValidade,
+                categoria = base.categoria ?: outro.categoria,
+                orgaoEmissor = base.orgaoEmissor ?: outro.orgaoEmissor,
+                filiacao = base.filiacao ?: outro.filiacao,
+                nacionalidade = base.nacionalidade ?: outro.nacionalidade,
+                // rawText acumula todos os textos para debug
+                rawText = (base.rawText + "\n---\n" + outro.rawText).trim()
+            )
+        }
+        return OcrResultado.Cnh(base)
+    }
+
+    private fun mergeRg(rgs: List<OcrResultado.Rg>): OcrResultado.Rg
+    {
+        val ordenados = rgs.sortedByDescending { pontuarRg(it.dadosRG) }
+        var base = ordenados[0].dadosRG
+
+        for (i in 1 until ordenados.size)
+        {
+            val outro = ordenados[i].dadosRG
+            base = base.copy(
+                nome = base.nome ?: outro.nome,
+                rg = base.rg ?: outro.rg,
+                cpf = base.cpf ?: outro.cpf,
+                dataNascimento = base.dataNascimento ?: outro.dataNascimento,
+                nomeMae = base.nomeMae ?: outro.nomeMae,
+                nomePai = base.nomePai ?: outro.nomePai,
+                naturalidade = base.naturalidade ?: outro.naturalidade,
+                dataEmissao = base.dataEmissao ?: outro.dataEmissao,
+                rawText = (base.rawText + "\n---\n" + outro.rawText).trim()
+            )
+        }
+        return OcrResultado.Rg(base)
+    }
+
+    private fun mergeCrlv(crlvs: List<OcrResultado.Crlv>): OcrResultado.Crlv {
+        val ordenados = crlvs.sortedByDescending { pontuarCrlv(it.dadosCRLV) }
+        var base = ordenados[0].dadosCRLV
+
+        for (i in 1 until ordenados.size) {
+            val outro = ordenados[i].dadosCRLV
+            base = base.copy(
+                placa = base.placa ?: outro.placa,
+                renavam = base.renavam ?: outro.renavam,
+                chassi = base.chassi ?: outro.chassi,
+                proprietario = base.proprietario ?: outro.proprietario,
+                cpfCnpjProprietario = base.cpfCnpjProprietario ?: outro.cpfCnpjProprietario,
+                marca = base.marca ?: outro.marca,
+                modelo = base.modelo ?: outro.modelo,
+                anoFabricacao = base.anoFabricacao ?: outro.anoFabricacao,
+                anoModelo = base.anoModelo ?: outro.anoModelo,
+                corPredominante = base.corPredominante ?: outro.corPredominante,
+                combustivel = base.combustivel ?: outro.combustivel,
+                especie = base.especie ?: outro.especie,
+                tipo = base.tipo ?: outro.tipo,
+                categoria = base.categoria ?: outro.categoria,
+                municipio = base.municipio ?: outro.municipio,
+                uf = base.uf ?: outro.uf,
+                validade = base.validade ?: outro.validade,
+                exercicio = base.exercicio ?: outro.exercicio,
+                potencia = base.potencia ?: outro.potencia,
+                cilindrada = base.cilindrada ?: outro.cilindrada,
+                pbt = base.pbt ?: outro.pbt,
+                cmt = base.cmt ?: outro.cmt,
+                capacidade = base.capacidade ?: outro.capacidade,
+                rawText = (base.rawText + "\n---\n" + outro.rawText).trim()
+            )
+        }
+        return OcrResultado.Crlv(base)
+    }
+
+
+    private fun pontuarResultado(r: OcrResultado): Int = when (r)
+    {
+        is OcrResultado.Cnh -> pontuarCnh(r.dadosCNH)
+        is OcrResultado.Rg -> pontuarRg(r.dadosRG)
+        is OcrResultado.Placa -> 1  // placa válida vale alguma coisa
+        is OcrResultado.Desconhecido -> 0
+        is OcrResultado.Crlv -> pontuarCrlv(r.dadosCRLV)
+    }
+
+    private fun pontuarCrlv(dados: DadosCRLV): Int
+    {
+        var score = 0
+        // Campos críticos valem mais
+        if (!dados.placa.isNullOrBlank()) score += 3
+        if (!dados.renavam.isNullOrBlank()) score += 3
+        if (!dados.chassi.isNullOrBlank()) score += 3
+
+        // Dados do proprietário
+        if (!dados.proprietario.isNullOrBlank()) score += 2
+        if (!dados.cpfCnpjProprietario.isNullOrBlank()) score += 2
+
+        // Dados do veículo e emissão
+        if (!dados.marca.isNullOrBlank()) score += 1
+        if (!dados.modelo.isNullOrBlank()) score += 1
+        if (!dados.exercicio.isNullOrBlank()) score += 1
+        if (!dados.anoFabricacao.isNullOrBlank()) score += 1
+        if (!dados.municipio.isNullOrBlank()) score += 1
+
+        return score
+    }
+
+
+    private fun pontuarCnh(dadosCNH: DadosCNH): Int
+    {
+        var score = 0
+        if (!dadosCNH.nome.isNullOrBlank()) score += 3
+        if (!dadosCNH.cpf.isNullOrBlank()) score += 3
+        if (!dadosCNH.rg.isNullOrBlank()) score += 2
+        if (!dadosCNH.dataNascimento.isNullOrBlank()) score += 2
+        if (!dadosCNH.dataValidade.isNullOrBlank()) score += 2
+        if (!dadosCNH.dataEmissao.isNullOrBlank()) score += 1
+        if (!dadosCNH.numeroRegistro.isNullOrBlank()) score += 2
+        if (!dadosCNH.categoria.isNullOrBlank()) score += 2
+        if (!dadosCNH.localNascimento.isNullOrBlank()) score += 1
+        if (!dadosCNH.orgaoEmissor.isNullOrBlank()) score += 1
+        if (!dadosCNH.filiacao.isNullOrBlank()) score += 1
+        return score
+    }
+
+    private fun pontuarRg(dadosRG: DadosRG): Int
+    {
+        var score = 0
+        if (!dadosRG.nome.isNullOrBlank()) score += 3
+        if (!dadosRG.rg.isNullOrBlank()) score += 3
+        if (!dadosRG.cpf.isNullOrBlank()) score += 3
+        if (!dadosRG.dataNascimento.isNullOrBlank()) score += 2
+        if (!dadosRG.nomeMae.isNullOrBlank()) score += 2
+        if (!dadosRG.nomePai.isNullOrBlank()) score += 1
+        if (!dadosRG.naturalidade.isNullOrBlank()) score += 1
+        return score
+    }
+
+    fun processarBitmapExterno(bitmap: Bitmap) = processarMultiplosBitmaps(listOf(bitmap))
+
+    fun shutdown()
+    {
         executor.shutdown()
         reconhecedorTexto.close()
     }
 
 
-    private fun ImageProxy.toBitmap(): Bitmap {
+    private fun ImageProxy.toBitmap(): Bitmap
+    {
         val buffer = planes[0].buffer
         val bytes = ByteArray(buffer.remaining())
         buffer.get(bytes)
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
     }
 
-    private fun Bitmap.rotateTo(degrees: Float): Bitmap {
+    private fun Bitmap.rotateTo(degrees: Float): Bitmap
+    {
         if (degrees == 0f) return this
         val matrix = Matrix().apply { postRotate(degrees) }
         return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)

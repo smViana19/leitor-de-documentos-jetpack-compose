@@ -1,4 +1,4 @@
-package com.example.leitordocumento_compose.ui.screen
+package com.example.leitordocumento_compose.presentation.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -43,12 +43,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 import com.example.leitordocumento_compose.R
-import com.example.leitordocumento_compose.ui.theme.AppTema
-import com.example.leitordocumento_compose.ui.theme.Contorno
+import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
+import com.example.leitordocumento_compose.presentation.ui.theme.Contorno
 
 @Composable
-fun FormScreen(modifier: Modifier = Modifier)
+fun FormScreen(navController: NavController)
 {
     Column(modifier = Modifier
         .fillMaxSize()
@@ -304,8 +306,9 @@ fun BotaoPrincipal(modifier: Modifier = Modifier)
 @Composable
 private fun FormScreenScreenPreview()
 {
+    val navController = rememberNavController()
     AppTema {
-        FormScreen()
+        FormScreen(navController)
     }
 }
 

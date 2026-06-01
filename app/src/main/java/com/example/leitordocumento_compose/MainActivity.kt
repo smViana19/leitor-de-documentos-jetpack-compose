@@ -40,11 +40,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.documentscan.DocumentScanScreen
-import com.example.leitordocumento_compose.ui.theme.AppTema
+import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
 import android.Manifest
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.painterResource
+import com.example.leitordocumento_compose.data.local.database.AppContainer
+import com.example.leitordocumento_compose.presentation.ui.navigation.MainNavigation
+import com.example.leitordocumento_compose.presentation.ui.navigation.Screens
 
 class MainActivity : ComponentActivity() {
 
@@ -57,6 +60,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppContainer.init(this)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
                 lightScrim = Color.Transparent.toArgb(),
@@ -70,9 +74,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             AppTema {
                 CameraPermissionWrapper {
-                    DocumentScanScreen(
-                        onClose = { finish() }
-                    )
+                    MainNavigation(Screens.TELA_HOME.name)
                 }
             }
         }
