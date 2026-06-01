@@ -521,15 +521,12 @@ object DocumentoOcrProcessador
             ?.let { regexCpf.find(it)?.value?.formatarCpf() }
         if (cpfPorRotulo != null) return cpfPorRotulo
 
-        // Por rótulo de CNPJ
         val cnpjPorRotulo = extractValueAfterKeyword(linhas, listOf("CNPJ"))
             ?.let { regexCnpj.find(it)?.value }
         if (cnpjPorRotulo != null) return cnpjPorRotulo
 
-        // Fallback: CNPJ formatado no texto
         regexCnpj.find(rawText)?.value?.let { return it }
 
-        // Fallback: CPF no texto
         return regexCpf.find(rawText)?.value?.formatarCpf()
     }
 

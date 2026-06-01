@@ -19,7 +19,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -47,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -80,12 +84,9 @@ fun PlacaScanScreen(
 
     val ttsManager = rememberTtsManager()
 
-    if (tipoVeiculo == TipoVeiculo.CARRO)
-    {
+    if (tipoVeiculo == TipoVeiculo.CARRO) {
         LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE)
-    }
-    else
-    {
+    } else {
         LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT)
 
     }
@@ -112,13 +113,11 @@ fun PlacaScanScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val dispararVibracao = {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-        {
-            val vibratorManager = contexto.getSystemService(Activity.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager =
+                contexto.getSystemService(Activity.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vibratorManager.defaultVibrator
-        }
-        else
-        {
+        } else {
             @Suppress("DEPRECATION")
             contexto.getSystemService(Activity.VIBRATOR_SERVICE) as Vibrator
         }
@@ -194,16 +193,17 @@ fun PlacaScanScreen(
     }
 
 
-    Box(modifier = Modifier
-        .fillMaxSize()
-        .background(Color.Black)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
 
-        // Overlay com guia no formato de placa (mais largo e baixo)
         PlacaScanOverlay(
             modifier = Modifier.fillMaxSize(),
             cornerAlpha = cornerPulse,
-            feedbackDocumento= feedbackDocumento,
+            feedbackDocumento = feedbackDocumento,
             tipoVeiculo = tipoVeiculo
         )
 
@@ -213,34 +213,58 @@ fun PlacaScanScreen(
             flashOn = false,
             onFlashToggle = {}
         )
-        if (!isProcessando)
-        {
+        if (!isProcessando) {
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
-                contentAlignment = Alignment.BottomEnd
+                    .padding(bottom = 36.dp),
+                contentAlignment = Alignment.BottomCenter
             ) {
-                FloatingActionButton(
-                    onClick = {
-                        if (!isProcessando)
-                        {
-                            isProcessando = true
-                            framesPerfeitos = 0
-                            ttsManager.falar("Capturando placa")
-                            dispararVibracao()
-                            ocrProcessador.capturarEProcessar()
-                        }
-                    },
-                    containerColor = AccentBlue,
-                    contentColor = Color.White,
-                    shape = CircleShape,
-                    modifier = Modifier.size(56.dp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_scanner),
-                        contentDescription = "Capturar manualmente"
+                    Text(
+                        text = "Toque para capturar",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .background(Color(0x66000000), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
                     )
+
+                    Box(
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .border(3.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+                        )
+                        FloatingActionButton(
+                            onClick = {
+                                if (!isProcessando) {
+                                    isProcessando = true
+                                    framesPerfeitos = 0
+                                    ttsManager.falar("Capturando placa")
+                                    dispararVibracao()
+                                    ocrProcessador.capturarEProcessar()
+                                }
+                            },
+                            containerColor = AccentBlue,
+                            contentColor = Color.White,
+                            shape = CircleShape,
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_scanner),
+                                contentDescription = "Capturar placa",
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -324,8 +348,7 @@ private fun PlacaScanOverlay(
                     guideSize = guideSize
                 )
 
-                if (feedbackDocumento.progresso > 0f)
-                {
+                if (feedbackDocumento.progresso > 0f) {
                     drawBarraQualidade(feedbackDocumento.progresso, corAnimada)
                 }
             },

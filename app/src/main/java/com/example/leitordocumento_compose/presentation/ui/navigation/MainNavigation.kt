@@ -114,6 +114,7 @@ fun MainNavigation(inicioNavegacao: String) {
                 FormularioPlacaScreen(
                     id = id,
                     dados = null,
+                    navController = navController,
                     onReler = { navController.popBackStack() }
                 )
             }

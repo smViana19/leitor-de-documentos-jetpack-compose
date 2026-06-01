@@ -2,8 +2,7 @@ package com.example.leitordocumento_compose.data
 
 import ResultadoPlaca
 
-sealed class OcrResultado
-{
+sealed class OcrResultado {
     data class Cnh(val dadosCNH: DadosCNH) : OcrResultado()
     data class Rg(val dadosRG: DadosRG) : OcrResultado()
     data class Crlv(val dadosCRLV: DadosCRLV) : OcrResultado()

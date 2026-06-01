@@ -168,12 +168,11 @@ fun DocumentScanScreen(
             contexto.getSystemService(Activity.VIBRATOR_SERVICE) as Vibrator
         }
 
-        // Uma batida firme e rápida (efeito de "click" de câmera)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK))
         } else {
             @Suppress("DEPRECATION")
-            vibrator.vibrate(100) // 100 milissegundos para aparelhos antigos
+            vibrator.vibrate(100)
         }
     }
 

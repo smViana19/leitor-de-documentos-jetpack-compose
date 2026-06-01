@@ -37,7 +37,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -49,7 +48,6 @@ import com.example.leitordocumento_compose.R
 import com.example.leitordocumento_compose.data.DadosCNH
 import com.example.leitordocumento_compose.data.local.repository.AppRepository
 import com.example.leitordocumento_compose.presentation.ui.components.Campo
-import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
 import com.example.leitordocumento_compose.presentation.ui.theme.AppTema
 
 @Composable
@@ -174,12 +172,12 @@ private fun FormularioScaffold(
                 },
                 actions = {
                     Surface(
-                        color = Color(0xFF1A2740),
+                        color = MaterialTheme.colorScheme.background,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.padding(end = 16.dp)
                     ) {
                         Text(
-                            badge, color = AccentBlue,
+                            badge, color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold, fontSize = 12.sp,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
@@ -216,7 +214,7 @@ private fun FormularioScaffold(
                     ) {
                         Text(
                             "Confirmar dados",
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
                     }

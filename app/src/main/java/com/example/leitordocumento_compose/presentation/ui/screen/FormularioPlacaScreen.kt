@@ -1,6 +1,7 @@
 package com.example.leitordocumento_compose.presentation.ui.screen
 
 import ResultadoPlaca
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,20 +41,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import com.example.leitordocumento_compose.R
 import com.example.leitordocumento_compose.data.local.repository.AppRepository
 import com.example.leitordocumento_compose.presentation.ui.components.Campo
+import com.example.leitordocumento_compose.presentation.ui.navigation.Screens
 import com.example.leitordocumento_compose.presentation.ui.theme.AccentBlue
 
 @Composable
 fun FormularioPlacaScreen(
     id: Long,
     dados: ResultadoPlaca?,
+    navController: NavController,
     onReler: () -> Unit
 ) {
     val repository = remember { AppRepository.fromAppContainer() }
@@ -83,20 +88,31 @@ fun FormularioPlacaScreen(
         titulo = "Placa detectada",
         badge = "PLACA",
         onReler = onReler,
-        onConfirm = { }
+        onConfirm = {
+            navController.popBackStack(Screens.TELA_HOME.route, inclusive = false)
+        }
     ) {
         SecaoCard("Placa identificada") {
             // Destaque visual da placa
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0A1628), RoundedCornerShape(12.dp))
                     .padding(vertical = 28.dp),
                 contentAlignment = Alignment.Center
             ) {
+                // Imagem de fundo (a placa PNG)
+                Image(
+                    painter = painterResource(id = R.drawable.placa), // seu asset aqui
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .width(300.dp)   // ajuste conforme proporção do seu PNG
+                        .height(94.dp)
+                )
+
                 Text(
                     text = placa.uppercase().ifBlank { "—" },
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Color.Black, // ajuste para combinar com o visual da placa
                     fontSize = 42.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 6.sp
@@ -195,7 +211,7 @@ private fun FormularioScaffold(
                     ) {
                         Text(
                             "Confirmar dados",
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
